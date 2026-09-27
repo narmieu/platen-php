@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PHP_VERSION: "8.4"
+  PHP_EXTENSIONS: dom, mbstring, pcntl, pdo_sqlite
+  WEASYPRINT_VERSION: "70.0"
+  GOTENBERG_IMAGE: gotenberg/gotenberg:8.37
+
+jobs:
+  checks:
+    name: Code style, static analysis and unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+      - run: composer validate --strict
+      - uses: ramsey/composer-install@v3
+      - run: composer cs
+      - run: composer phpstan
+      - run: composer test
+
+  end-to-end:
+    name: End-to-end tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: ${{ env.PHP_EXTENSIONS }}
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - name: Install qpdf, WeasyPrint and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qpdf \
+            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core fonts-liberation
+          pipx install "weasyprint==${WEASYPRINT_VERSION}"
+          weasyprint --version
+      # Host networking, so that Chromium reaches the egress proxy the tests start at
+      # 127.0.0.1:3128 and the asset server through the docker0 address.
+      - name: Start Gotenberg
+        run: |
+          docker run -d --name gotenberg --network host "$GOTENBERG_IMAGE" \
+            gotenberg --api-timeout=620s --chromium-proxy-server=http://127.0.0.1:3128 \
+            --chromium-restart-after=0
+          timeout 60 bash -c 'until curl -fs http://127.0.0.1:3000/health > /dev/null; do sleep 1; done'
+      - run: composer test:e2e
+      - name: Gotenberg log
+        if: failure()
+        run: docker logs gotenberg
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-24.04
+    env:
+      PLATEN_API_KEYS: smoke-key
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: platen:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start platen and Gotenberg
+        run: docker compose -f compose.yaml -f tests/Docker/compose.smoke.yaml up -d --no-build --wait
+      - name: Smoke test
+        run: PLATEN_API_KEY=smoke-key tests/Docker/smoke-test.sh
+      - name: Container logs
+        if: always()
+        run: docker compose -f compose.yaml -f tests/Docker/compose.smoke.yaml logs
+
+  publish:
+    name: Publish the image
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [checks, end-to-end, docker]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the tag matches Platen::VERSION
+        run: grep -q "VERSION = '${GITHUB_REF_NAME#v}'" src/Platen.php
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha

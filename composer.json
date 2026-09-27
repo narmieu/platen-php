@@ -1,0 +1,120 @@
+{
+    "name": "platen/platen",
+    "description": "Self-hosted HTML to PDF server with a DocRaptor-compatible API, built on WeasyPrint and Chromium",
+    "type": "project",
+    "license": "MIT",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": ">=8.4",
+        "ext-ctype": "*",
+        "ext-dom": "*",
+        "ext-iconv": "*",
+        "ext-pcntl": "*",
+        "ext-pdo_sqlite": "*",
+        "clue/http-proxy-react": "^1.8",
+        "doctrine/doctrine-bundle": "^3.3",
+        "doctrine/doctrine-migrations-bundle": "^4.0",
+        "doctrine/orm": "^3.7",
+        "react/socket": "^1.17",
+        "symfony/console": "7.4.*",
+        "symfony/doctrine-messenger": "7.4.*",
+        "symfony/dotenv": "7.4.*",
+        "symfony/flex": "^2",
+        "symfony/framework-bundle": "7.4.*",
+        "symfony/http-client": "7.4.*",
+        "symfony/messenger": "7.4.*",
+        "symfony/mime": "7.4.*",
+        "symfony/monolog-bundle": "^4.1",
+        "symfony/process": "7.4.*",
+        "symfony/runtime": "7.4.*",
+        "symfony/scheduler": "7.4.*",
+        "symfony/yaml": "7.4.*"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "symfony/flex": true,
+            "symfony/runtime": true,
+            "phpstan/extension-installer": true
+        },
+        "bump-after-update": true,
+        "sort-packages": true
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "App\\Tests\\": "tests/"
+        }
+    },
+    "replace": {
+        "symfony/polyfill-ctype": "*",
+        "symfony/polyfill-iconv": "*",
+        "symfony/polyfill-php72": "*",
+        "symfony/polyfill-php73": "*",
+        "symfony/polyfill-php74": "*",
+        "symfony/polyfill-php80": "*",
+        "symfony/polyfill-php81": "*",
+        "symfony/polyfill-php82": "*"
+    },
+    "scripts": {
+        "auto-scripts": {
+            "cache:clear": "symfony-cmd",
+            "assets:install %PUBLIC_DIR%": "symfony-cmd"
+        },
+        "post-install-cmd": [
+            "@auto-scripts"
+        ],
+        "post-update-cmd": [
+            "@auto-scripts"
+        ],
+        "cs": "php-cs-fixer check --diff",
+        "cs:fix": "php-cs-fixer fix",
+        "phpstan": [
+            "@php bin/console cache:warmup --env=dev --quiet",
+            "phpstan analyse --memory-limit=1G"
+        ],
+        "test": "phpunit --testsuite unit",
+        "test:e2e": [
+            "Composer\\Config::disableProcessTimeout",
+            "phpunit --testsuite end-to-end"
+        ],
+        "check": [
+            "@cs",
+            "@phpstan",
+            "@test"
+        ]
+    },
+    "scripts-descriptions": {
+        "cs": "Checks the code style",
+        "cs:fix": "Fixes the code style",
+        "phpstan": "Runs static analysis at the strictest level",
+        "test": "Runs the unit tests",
+        "test:e2e": "Runs the end-to-end tests against real renderers (see the README)",
+        "check": "Runs what CI runs before the end-to-end tests: code style, static analysis and unit tests"
+    },
+    "conflict": {
+        "symfony/symfony": "*"
+    },
+    "extra": {
+        "symfony": {
+            "allow-contrib": false,
+            "require": "7.4.*"
+        }
+    },
+    "require-dev": {
+        "docraptor/docraptor": "^4.2",
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-doctrine": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpstan/phpstan-symfony": "^2.0",
+        "phpunit/phpunit": "^13.3",
+        "smalot/pdfparser": "^2.12"
+    }
+}

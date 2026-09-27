@@ -1,0 +1,14 @@
+.git
+.github
+.dockerignore
+.env.local
+.env.*.local
+.php-cs-fixer*
+Dockerfile
+compose*.yaml
+phpstan*.neon
+phpunit*.xml
+tests
+var
+vendor
+*.md

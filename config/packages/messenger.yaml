@@ -1,0 +1,29 @@
+framework:
+    messenger:
+        transports:
+            # Workers run with --keepalive (platen:serve starts them so), which keeps the
+            # message of a long render claimed. A message whose worker died is delivered
+            # again after redeliver_timeout seconds.
+            render:
+                dsn: 'doctrine://default?queue_name=render&redeliver_timeout=30'
+                retry_strategy:
+                    # The handler records failures on the document; it retries on its own
+                    # when the renderer is unavailable.
+                    max_retries: 0
+            callbacks:
+                dsn: 'doctrine://default?queue_name=callbacks&redeliver_timeout=30'
+                retry_strategy:
+                    max_retries: 2
+                    delay: 1000
+                    multiplier: 2
+
+        routing:
+            App\Messenger\RenderDocument: render
+            App\Messenger\SendCallback: callbacks
+
+when@test:
+    framework:
+        messenger:
+            transports:
+                render: 'sync://'
+                callbacks: 'sync://'

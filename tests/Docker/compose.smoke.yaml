@@ -1,0 +1,8 @@
+# Adds an asset host to compose.yaml for smoke-test.sh. Paths are relative to the
+# repository root, where compose.yaml is.
+services:
+  assets:
+    image: busybox:1.37
+    command: ["httpd", "-f", "-p", "8000", "-h", "/www"]
+    volumes:
+      - ./tests/Docker/assets:/www:ro
