@@ -42,6 +42,11 @@ if ('POST' === $method) {
     send(200, '<html><head><link rel="stylesheet" href="style.css"></head><body><h1>From URL</h1><img src="pixel.png" width="40" height="40"></body></html>');
 } elseif ('/style.css' === $path) {
     send(200, 'h1::after { content: " styled"; }', 'text/css');
+} elseif ('/fonts.css' === $path) {
+    send(200, '@font-face { font-family: "Platen Test"; src: url(fonts/platen-test.woff) format("woff"); }', 'text/css');
+} elseif ('/fonts/platen-test.woff' === $path) {
+    // Like most sites' own fonts: no Access-Control-Allow-Origin header.
+    send(200, (string) file_get_contents(__DIR__.'/fonts/platen-test.woff'), 'font/woff');
 } elseif (in_array($path, ['/pixel.png', '/secret', '/ua.png'], true)) {
     send(200, png(), 'image/png');
 } elseif ('/redirect' === $path) {

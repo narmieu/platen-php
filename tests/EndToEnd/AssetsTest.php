@@ -37,6 +37,39 @@ final class AssetsTest extends EndToEndTestCase
         self::assertSame(1, $pdf->imageCount());
     }
 
+    /**
+     * The font's server sends no Access-Control-Allow-Origin header, which Chromium needs
+     * for a page loaded from a file, as Gotenberg loads it.
+     */
+    #[DataProvider('engines')]
+    public function testWebFontsWithoutCorsHeaders(string $engine): void
+    {
+        self::requireEngine($engine);
+        $response = self::render([
+            'pipeline' => $engine,
+            'document_content' => '<link rel="stylesheet" href="fonts.css"><p style="font-family: \'Platen Test\', monospace">Certificate</p>',
+            'prince_options' => ['baseurl' => self::assets()->url('/')],
+            'ignore_resource_errors' => false,
+        ]);
+
+        self::assertSame(200, $response->getStatusCode(), $response->getContent(false));
+        // Chromium names the font PlatenTest-Regular, WeasyPrint Platen-Test.
+        $fonts = PdfFile::fromBytes($response->getContent())->fontNames();
+        self::assertNotEmpty(preg_grep('/^Platen-?Test/', $fonts), 'Embedded fonts: '.implode(', ', $fonts));
+    }
+
+    public function testMissingFontFailsWhenNotIgnored(): void
+    {
+        self::requireEngine('chromium');
+        $html = '<style>@font-face { font-family: Gone; src: url('.self::assets()->url('/fonts/gone.woff').') }</style><p style="font-family: Gone">x</p>';
+
+        self::assertSame(200, self::render(['pipeline' => 'chromium', 'document_content' => $html])->getStatusCode());
+
+        $response = self::render(['pipeline' => 'chromium', 'document_content' => $html, 'ignore_resource_errors' => false]);
+        self::assertSame(400, $response->getStatusCode());
+        self::assertStringContainsString('font Gone', $response->getContent(false));
+    }
+
     #[DataProvider('engines')]
     public function testDocumentUrlErrors(string $engine): void
     {

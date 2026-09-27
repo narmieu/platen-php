@@ -103,6 +103,12 @@
     finished = true;
     report.timeout = timeout;
     report.title = document.title || null;
+    // A font that fails to load raises no error event: Chromium quietly uses another.
+    if (document.fonts) {
+      document.fonts.forEach((face) => {
+        if (face.status === 'error') remember(report.failed, `font ${face.family} (${face.style} ${face.weight})`, 10);
+      });
+    }
     // Chromium draws a broken-image icon where Prince and WeasyPrint show the alt text.
     for (const image of Array.from(document.images)) {
       if (failedElements.has(image)) image.replaceWith(document.createTextNode(image.getAttribute('alt') || ''));

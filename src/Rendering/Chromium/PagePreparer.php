@@ -27,9 +27,10 @@ final class PagePreparer
     }
 
     /**
-     * @param string $token random per render: the CSP nonce and the report marker
+     * @param string $token   random per render: the CSP nonce and the report marker
+     * @param string $fontCss @font-face rules that embed fonts (see FontEmbedder)
      */
-    public function prepare(RenderJob $job, string $token): string
+    public function prepare(RenderJob $job, string $token, string $fontCss = ''): string
     {
         $document = HtmlDocument::parse($job->html);
         if (!$job->javascript) {
@@ -59,6 +60,12 @@ final class PagePreparer
 
         if (null !== $job->options->pdfTitle) {
             $document->setTitle($job->options->pdfTitle);
+        }
+        if ('' !== $fontCss) {
+            // Last, so these rules win over the document's own for the same faces. The
+            // CSS comes from stylesheets, so "<" is escaped to keep it from closing the
+            // <style> element.
+            $document->body()->append($document->element('style', str_replace('<', '\3c ', $fontCss), ['data-platen' => 'fonts']));
         }
         if ($job->watermark) {
             $document->body()->append($document->element('style', PageStyles::WATERMARK, ['data-platen' => 'watermark']));

@@ -32,11 +32,13 @@ echo "ok: healthz"
 echo "ok: a key is required"
 
 for engine in weasyprint chromium; do
+    # The asset host sends no CORS headers, without which Chromium refuses the font unless
+    # platen embeds it, and a font that fails stops rendering (ignore_resource_errors).
     status=$(post /docs '{"document_type": "pdf", "test": false, "pipeline": "'$engine'", "ignore_resource_errors": false,
-        "document_content": "<h1>Smoke test</h1><img src=\"http://assets:8000/pixel.png\" width=\"20\" height=\"20\">"}')
+        "document_content": "<link rel=\"stylesheet\" href=\"http://assets:8000/smoke/fonts.css\"><h1 style=\"font-family: Platen Test\">Smoke test</h1><img src=\"http://assets:8000/smoke/pixel.png\" width=\"20\" height=\"20\">"}')
     [ "$status" = 200 ] || fail "$engine: $status $(cat "$work/body")"
     [ "$(head -c 5 "$work/body")" = "%PDF-" ] || fail "$engine did not return a PDF"
-    echo "ok: $engine renders, fetching an image through the egress proxy"
+    echo "ok: $engine renders, fetching an image and a web font through the egress proxy"
 
     status=$(post /docs '{"document_type": "pdf", "test": false, "pipeline": "'$engine'", "ignore_resource_errors": false,
         "document_content": "<img src=\"http://169.254.169.254/latest/meta-data/\">"}')

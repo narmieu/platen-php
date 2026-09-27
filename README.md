@@ -129,6 +129,11 @@ XML with DocRaptor's status codes (400, 401, 403, 422). PDFs carry the
 - Prince-only CSS and JavaScript (`prince-*` properties, `prince-script()`, Prince's
   JavaScript APIs) are not supported. Standard paged-media CSS is.
 - Without an `@page` size, pages are US Letter with 54pt margins, Prince's defaults.
+- Web fonts load from any server, as with Prince. Because Gotenberg loads each page from
+  a file, Chromium would only load fonts whose server sends
+  `Access-Control-Allow-Origin: *`, so platen downloads the others and embeds them in the
+  page. It finds fonts in `<style>` elements and stylesheets (up to 20 stylesheets and
+  60 fonts a document), but not fonts that scripts add.
 - Line breaking, font fallback and hyphenation can differ slightly from Prince. Render
   your own templates with both and compare before switching.
 
@@ -193,12 +198,13 @@ A one-page A4 certificate with two web fonts, on a 4-CPU machine, measured at th
 
 | Engine | One at a time | Four at a time |
 | --- | --- | --- |
-| WeasyPrint | 730 ms per document | 4.5 documents per second (about 16,000 an hour) |
-| Chromium | 290 ms per document | 8.3 documents per second (about 30,000 an hour) |
+| WeasyPrint | 760 ms per document | 4.6 documents per second (about 16,500 an hour) |
+| Chromium | 310 ms per document | 7.4 documents per second (about 26,500 an hour) |
 
 platen starts WeasyPrint for each document, and Python loading WeasyPrint takes about
-0.55 s of those 730 ms; the rendering itself takes about 0.1 s. Chromium's time is
-mostly Gotenberg's work per document. Beyond the documents rendering at once, requests
+0.55 s of those 760 ms; the rendering itself takes about 0.1 s. Chromium's time is
+mostly Gotenberg's work per document, plus about 30 ms to embed the two fonts, whose
+server sends no CORS header. Beyond the documents rendering at once, requests
 wait for a free HTTP worker rather than failing.
 
 ## How it works

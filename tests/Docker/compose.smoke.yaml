@@ -5,4 +5,5 @@ services:
     image: busybox:1.37
     command: ["httpd", "-f", "-p", "8000", "-h", "/www"]
     volumes:
-      - ./tests/Docker/assets:/www:ro
+      - ./tests/Docker/assets:/www/smoke:ro
+      - ./tests/Support/fonts:/www/fonts:ro

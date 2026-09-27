@@ -154,6 +154,21 @@ final class PagePreparerTest extends TestCase
     }
 
     #[Test]
+    public function embeddedFontsComeAfterTheDocumentsOwnStyles(): void
+    {
+        $fontCss = '@font-face{font-family:"a</style><script>x()</script>";src:url("data:font/woff2;base64,AAAA")}';
+        $html = new PagePreparer(30.0)->prepare(self::job('<style>p { color: red }</style><p>x</p>', javascript: false), self::TOKEN, $fontCss);
+
+        self::assertMatchesRegularExpression('/color: red.*<style data-platen="fonts">@font-face/s', $html);
+        // "<" is escaped as CSS, so the rule cannot end the <style> element.
+        self::assertStringContainsString('font-family:"a\3c /style>\3c script>x()\3c /script>"', $html);
+        self::assertStringNotContainsString('<script>x()', $html);
+
+        $plain = self::prepare(self::job('<p>x</p>', javascript: false));
+        self::assertStringNotContainsString('data-platen="fonts"', $plain);
+    }
+
+    #[Test]
     public function itAlwaysAddsThePageDefaultsStyle(): void
     {
         $html = self::prepare(self::job('<body>x</body>', javascript: false));

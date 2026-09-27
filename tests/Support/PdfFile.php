@@ -111,6 +111,22 @@ final class PdfFile
         return array_sum(array_map(static fn (array $page): int => \is_array($page['images'] ?? null) ? \count($page['images']) : 0, $this->pages()));
     }
 
+    /**
+     * @return list<string> the PostScript names of the embedded fonts, without subset tags
+     */
+    public function fontNames(): array
+    {
+        $names = [];
+        foreach ($this->objects() as $object) {
+            $value = \is_array($object) ? ($object['value'] ?? null) : null;
+            if (\is_array($value) && '/Font' === ($value['/Type'] ?? null) && \is_string($value['/BaseFont'] ?? null)) {
+                $names[] = (string) preg_replace('/^\/([A-Z]{6}\+)?/', '', $value['/BaseFont']);
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
     public function title(): ?string
     {
         $info = $this->object(self::string($this->trailer()['/Info'] ?? null));
@@ -220,12 +236,20 @@ final class PdfFile
      */
     private function value(string $key): array
     {
-        $sections = $this->json['qpdf'] ?? null;
-        $objects = \is_array($sections) && \is_array($sections[1] ?? null) ? $sections[1] : [];
-        $object = $objects[$key] ?? null;
+        $object = $this->objects()[$key] ?? null;
         $value = \is_array($object) ? ($object['value'] ?? null) : null;
 
         return \is_array($value) ? $value : [];
+    }
+
+    /**
+     * @return array<mixed> every object and the trailer, by key ("obj:5 0 R", "trailer")
+     */
+    private function objects(): array
+    {
+        $sections = $this->json['qpdf'] ?? null;
+
+        return \is_array($sections) && \is_array($sections[1] ?? null) ? $sections[1] : [];
     }
 
     /**

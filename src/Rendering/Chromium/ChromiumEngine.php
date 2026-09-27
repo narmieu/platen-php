@@ -36,6 +36,7 @@ final readonly class ChromiumEngine
         private PlatenConfig $config,
         private HttpClientInterface $httpClient,
         private Qpdf $qpdf,
+        private FontEmbedder $fonts,
     ) {
     }
 
@@ -47,7 +48,7 @@ final readonly class ChromiumEngine
     public function render(RenderJob $job, Workspace $workspace): EngineOutput
     {
         $token = bin2hex(random_bytes(12));
-        $page = new PagePreparer($this->config->jsTimeout)->prepare($job, $token);
+        $page = new PagePreparer($this->config->jsTimeout)->prepare($job, $token, $this->fonts->css($job));
         $output = $workspace->file('chromium.pdf');
         $this->convert($job, $page, $output);
 
