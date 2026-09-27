@@ -39,6 +39,11 @@ WORKDIR /app
 
 FROM base AS build
 
+# Composer needs unzip to unpack the packages it downloads.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends unzip; \
+    rm -rf /var/lib/apt/lists/*
 COPY --from=composer/composer:2-bin /composer /usr/local/bin/composer
 ENV APP_ENV=prod \
     APP_DEBUG=0 \
