@@ -1,0 +1,24 @@
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "platen-weasyprint"
+version = "0.1.0"
+description = "WeasyPrint 70.0 with platen's patches: quality fixes for every render, Prince compatibility on request"
+requires-python = ">=3.11"
+dependencies = [
+    "weasyprint==70.0",
+    "pydyf==0.13.0",
+    "pyphen==0.18.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "pypdf"]
+
+[project.scripts]
+weasyprint-platen = "platen_weasyprint.cli:main"
+
+[tool.pytest.ini_options]
+# The tests in every folder import their helpers with "from support import ...".
+pythonpath = ["tests"]

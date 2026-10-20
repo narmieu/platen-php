@@ -7,7 +7,7 @@ ARG FRANKENPHP_IMAGE=dunglas/frankenphp:1.12-php8.4-trixie
 
 FROM ${FRANKENPHP_IMAGE} AS base
 
-# The version the end-to-end tests run against.
+# The version platen-weasyprint supports (docker/weasyprint/pyproject.toml pins it).
 ARG WEASYPRINT_VERSION=70.0
 
 RUN set -eux; \
@@ -33,6 +33,14 @@ RUN set -eux; \
     ln -s /opt/weasyprint/bin/weasyprint /usr/local/bin/weasyprint; \
     weasyprint --version; \
     qpdf --version
+
+# weasyprint-platen: WeasyPrint with platen's quality fixes, plus the Prince compatibility
+# fixes when given --platen-prince.
+COPY docker/weasyprint /opt/platen-weasyprint
+RUN set -eux; \
+    /opt/weasyprint/bin/pip install --no-cache-dir /opt/platen-weasyprint; \
+    ln -s /opt/weasyprint/bin/weasyprint-platen /usr/local/bin/weasyprint-platen; \
+    weasyprint-platen --version
 
 WORKDIR /app
 
