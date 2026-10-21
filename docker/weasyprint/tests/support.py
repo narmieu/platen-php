@@ -4,7 +4,8 @@ Every length is in pt (1 CSS px = 0.75 pt). Positions are measured from the top-
 corner of the page, y growing downwards, as in the CSS layout. Pages count from 0.
 
 Layout helpers (render, runs, all_text, lines, baselines, line_extents, sup_style,
-growth_above, margin_boxes, texts) read WeasyPrint's box tree;
+growth_above, sup_raise, sub_drop, computed_font_size, sup_font_size, margin_boxes, texts)
+read WeasyPrint's box tree;
 PDF helpers (pdf_fonts, page_group_cs, content) read the written PDF with pypdf.
 """
 
@@ -199,6 +200,43 @@ def growth_above(family: str, sup_size: float) -> float:
     )
     r1, t, r2, r3 = baselines(doc)
     return (t - r1) - (r3 - r2)
+
+
+def sup_raise(family: str) -> float:
+    """How far a <sup> of font size 10pt raises its baseline, in pt: in a paragraph in 20pt
+    ``family`` with line-height 24pt, above the baseline of the paragraph's text."""
+    return -_script_shift(family, "sup")
+
+
+def sub_drop(family: str) -> float:
+    """How far a <sub> of font size 10pt lowers its baseline, in pt: in a paragraph in 20pt
+    ``family`` with line-height 24pt, below the baseline of the paragraph's text."""
+    return _script_shift(family, "sub")
+
+
+def _script_shift(family: str, tag: str) -> float:
+    doc = render(
+        f"<style>p {{ margin: 0; font: 20pt/24pt '{family}' }}</style>"
+        f'<p>x<{tag} style="font-size: 10pt">2</{tag}></p>'
+    )
+    [[text, script]] = lines(doc)
+    return script.baseline - text.baseline
+
+
+def computed_font_size(parent: float, keyword: str) -> float:
+    """The font size, in pt, of a span with ``font-size: keyword`` ("smaller", "larger")
+    in a paragraph of font size ``parent`` pt."""
+    doc = render(
+        f'<p style="font-size: {parent}pt">x<span style="font-size: {keyword}">y</span></p>'
+    )
+    [[_, span]] = lines(doc)
+    return span.font_size
+
+
+def sup_font_size(parent: float) -> float:
+    """The font size, in pt, of a <sup> without author styles in a paragraph of font size
+    ``parent`` pt."""
+    return sup_style(f'<p style="font-size: {parent}pt">x<sup>2</sup></p>')["font_size"]
 
 
 def margin_boxes(doc: weasyprint.Document, page: int = 0) -> dict[str, Box]:
