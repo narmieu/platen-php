@@ -4,9 +4,12 @@ WeasyPrint gives fontconfig the weight of each @font-face rule and lets it pick 
 of the closest weight on its own, non-linear scale (300 is 50 there, 100 is 0, 400 is 80),
 which differs from CSS where faces are missing. Here every font configuration keeps the
 weights of the @font-face faces it loaded, by family and style. When a style's first font
-family is one of them, the weight given to Pango is the one the matching rule picks among
-the faces of that style (or of the fallback style, as in CSS), which fontconfig then finds
-exactly. System fonts are left to fontconfig.
+family is one of them and the matching rule picks, among the faces of that style (or of
+the fallback style, as in CSS), another face than fontconfig's nearest weight, the weight
+given to Pango is the picked one, which fontconfig then finds exactly. The one weight of
+the description also selects the fallback fonts for glyphs the family lacks, so it is only
+changed when the face differs: otherwise fallback glyphs keep the requested weight, as in
+browsers. System fonts are left to fontconfig.
 
 - set_rule() replaces the rule (the Prince layer uses CSS Fonts Level 3). The rule is read
   each time a font description is made, and nothing computed with it is cached.
@@ -114,8 +117,9 @@ def faces(font_config) -> dict[tuple[str, str], list[Weight | None]]:
 
 def matched_weight(style) -> int | None:
     """The weight that the rule picks for ``style`` among the faces of its first font
-    family, or None when that family is no @font-face family, or when one of the faces
-    it would pick from has no font-weight descriptor."""
+    family, or None to keep the requested weight: when that family is no @font-face
+    family, when one of the faces it would pick from has no font-weight descriptor, or
+    when fontconfig's nearest weight picks the same face anyway."""
     font_config = getattr(style, "font_config", None)
     registry = {} if font_config is None else faces(font_config)
     if not registry or not style["font_family"]:
@@ -124,8 +128,30 @@ def matched_weight(style) -> int | None:
     for font_style in _STYLE_ORDER[style["font_style"]]:
         weights = registry.get((family, font_style))
         if weights:
-            return None if None in weights else _rule(style["font_weight"], weights)
+            if None in weights:
+                return None
+            desired = style["font_weight"]
+            picked = _rule(desired, weights)
+            return None if picked == _fontconfig_pick(desired, weights) else picked
     return None
+
+
+def _fontconfig_pick(desired: int, weights: Iterable[Weight]) -> int | None:
+    """The weight of the face fontconfig picks for ``desired`` among ``weights``: the
+    nearest on its scale, ``desired`` itself in a range that contains it. None when two
+    weights are equally near."""
+    target = _fc_weight(desired)
+    nearest, best = set(), None
+    for weight in weights:
+        if isinstance(weight, tuple):
+            low, high = weight
+            weight = min(max(desired, low), high)
+        distance = abs(_fc_weight(weight) - target)
+        if best is None or distance < best:
+            nearest, best = {weight}, distance
+        elif distance == best:
+            nearest.add(weight)
+    return nearest.pop() if len(nearest) == 1 else None
 
 
 def _fc_weight(weight: float) -> float:

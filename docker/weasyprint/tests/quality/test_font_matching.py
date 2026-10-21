@@ -16,6 +16,37 @@ def test_italic_500_uses_the_200_face():
     assert pdf_fonts(pdf(faces + '<i style="font: 500 10pt W">x</i>')) == {"LiberationSans"}
 
 
+def test_italic_request_uses_the_200_face():
+    faces = face("W", "italic", 200, "LiberationSans-Regular.ttf") + face("W", "italic", 700, "DejaVuSans-Bold.ttf")
+    assert pdf_fonts(pdf(faces + '<p style="font: italic 500 10pt W">x</p>')) == {"LiberationSans"}
+
+
+def test_italic_request_matches_among_the_italic_faces():
+    faces = (face("M", "normal", 100, "DejaVuSansMono.ttf") + face("M", "normal", 400, "LiberationMono-Regular.ttf")
+             + face("M", "italic", 200, "LiberationSans-Regular.ttf") + face("M", "italic", 700, "DejaVuSans-Bold.ttf"))
+    assert pdf_fonts(pdf(faces + '<p style="font: italic 500 10pt M">x</p>')) == {"LiberationSans"}
+
+
+# Task 15's Prince rule picks 700 here, where fontconfig's nearest weight is 200.
+def test_a_rule_picking_700_for_italic_500_gets_the_700_face():
+    faces = face("W", "italic", 200, "LiberationSans-Regular.ttf") + face("W", "italic", 700, "DejaVuSans-Bold.ttf")
+    font_matching.set_rule(lambda desired, available: 700 if desired == 500 else font_matching.css4_match(desired, available))
+    try:
+        assert pdf_fonts(pdf(faces + '<p style="font: italic 500 10pt W">x</p>')) == {"DejaVuSans-Bold"}
+    finally:
+        font_matching.set_rule(font_matching.css4_match)
+
+
+# Where fontconfig's nearest weight finds the face anyway, the requested weight stays, so that
+# glyphs from fallback fonts (Cyrillic here, from Liberation Serif) keep it, as in stock WeasyPrint.
+@pytest.mark.parametrize("family, file, face_weight, weight, expected", [
+    ("W", "LiberationSans-Regular.ttf", 400, "bold", {"LiberationSans", "LiberationSerif-Bold"}),
+    ("H", "LiberationSans-Bold.ttf", 700, "400", {"LiberationSans-Bold", "LiberationSerif"})])
+def test_fallback_glyphs_keep_the_requested_weight(family, file, face_weight, weight, expected):
+    faces = face(family, "normal", face_weight, file, "U+0000-00FF")
+    assert pdf_fonts(pdf(faces + f'<p style="font: {weight} 10pt {family}">жд ab</p>')) == expected
+
+
 def test_unicode_range_subsets_of_one_weight_are_both_used():
     faces = (face("U", "normal", 400, "LiberationSans-Regular.ttf", "U+0000-00FF")
              + face("U", "normal", 400, "DejaVuSans.ttf", "U+0100-017F"))
