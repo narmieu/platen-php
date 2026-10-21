@@ -9,9 +9,9 @@ from types import ModuleType
 
 from .. import apply_modules
 
-from . import line_metrics, page_colorspace, prince_syntax, svg
+from . import line_metrics, page_colorspace, prince_syntax, superscripts, svg
 
-MODULES: list[ModuleType] = [svg, prince_syntax, page_colorspace, line_metrics]
+MODULES: list[ModuleType] = [svg, prince_syntax, page_colorspace, line_metrics, superscripts]
 
 _applied: set[ModuleType] = set()
 

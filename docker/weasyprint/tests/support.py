@@ -3,7 +3,8 @@
 Every length is in pt (1 CSS px = 0.75 pt). Positions are measured from the top-left
 corner of the page, y growing downwards, as in the CSS layout. Pages count from 0.
 
-Layout helpers (render, runs, lines, baselines, margin_boxes, texts) read WeasyPrint's box tree;
+Layout helpers (render, runs, lines, baselines, line_extents, sup_style, growth_above,
+margin_boxes, texts) read WeasyPrint's box tree;
 PDF helpers (pdf_fonts, page_group_cs, content) read the written PDF with pypdf.
 """
 
@@ -18,6 +19,7 @@ import weasyprint
 from fontTools.ttLib import TTFont, TTLibError
 from pypdf import PdfReader
 from pypdf.generic import ArrayObject, ContentStream, DictionaryObject, IndirectObject, NameObject
+from weasyprint.css.properties import Dimension
 from weasyprint.formatting_structure import boxes
 from weasyprint.text.ffi import ffi, fontconfig
 
@@ -126,6 +128,59 @@ def baselines(doc: weasyprint.Document, page: int = 0) -> list[float]:
     return [(line.position_y + line.baseline) * PT_PER_PX for line, _ in _lines(doc, page)]
 
 
+def line_extents(doc: weasyprint.Document, page: int = 0) -> list[tuple[float, float]]:
+    """(top, bottom) of each line box of lines(), in the same order: the line box's own
+    top and bottom, widened to the margin boxes of the in-flow inline-level boxes in it,
+    so that a box sticking out of its line counts."""
+    extents = []
+    for line, _ in _lines(doc, page):
+        top, bottom = line.position_y, line.position_y + line.height
+        for box in _inline_level_boxes(line):
+            top = min(top, box.position_y)
+            bottom = max(bottom, box.position_y + box.margin_height())
+        extents.append((top * PT_PER_PX, bottom * PT_PER_PX))
+    return extents
+
+
+def sup_style(html: str) -> "PtStyle":
+    """The computed style of the first sub or sup element of ``html``, with lengths in pt."""
+    for box in _boxes(render(html), 0):
+        if box.element_tag in ("sub", "sup"):
+            return PtStyle(box.style)
+    raise LookupError("no sub or sup element")
+
+
+class PtStyle:
+    """A WeasyPrint computed style read in pt: a Dimension in px becomes a Dimension in
+    pt, and ``font_size`` a number of pt. Other values are WeasyPrint's."""
+
+    def __init__(self, style):
+        self._style = style
+
+    def __getitem__(self, name: str):
+        value = self._style[name]
+        if name == "font_size":
+            return value * PT_PER_PX
+        if isinstance(value, Dimension) and value.unit == "px":
+            return Dimension(value.value * PT_PER_PX, "pt")
+        return value
+
+
+def growth_above(family: str, sup_size: float) -> float:
+    """How much higher a superscript makes the top of its line, in pt.
+
+    Four paragraphs without margins in 20pt ``family`` with line-height 24pt, R1, T, R2,
+    R3, where only T has a <sup> of font size ``sup_size`` pt: (T − R1) − (R3 − R2) on
+    their baselines.
+    """
+    doc = render(
+        f"<style>p {{ margin: 0; font: 20pt/24pt '{family}' }}</style>"
+        f'<p>x</p><p>x<sup style="font-size: {sup_size}pt">2</sup></p><p>x</p><p>x</p>'
+    )
+    r1, t, r2, r3 = baselines(doc)
+    return (t - r1) - (r3 - r2)
+
+
 def margin_boxes(doc: weasyprint.Document, page: int = 0) -> dict[str, Box]:
     """The page's generated margin boxes, keyed by at-keyword without "@" ("top-center")."""
     return {
@@ -184,6 +239,17 @@ def _text_boxes_of_line(box):
             yield child
         elif isinstance(child, boxes.InlineBox):
             yield from _text_boxes_of_line(child)
+
+
+def _inline_level_boxes(box):
+    """The in-flow inline boxes, text boxes and atomic inlines of a line box or inline
+    box, recursively (not the content of atomic inlines)."""
+    for child in box.children:
+        if not child.is_in_normal_flow():
+            continue
+        yield child
+        if isinstance(child, boxes.InlineBox):
+            yield from _inline_level_boxes(child)
 
 
 # PDF
