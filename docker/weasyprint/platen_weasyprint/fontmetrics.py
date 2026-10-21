@@ -3,8 +3,9 @@ font's own tables.
 
 Browsers and Prince size lines from the ascender A, descender D and line gap G of the
 element's first available font: from the OS/2 typo values when the font sets
-USE_TYPO_METRICS (``fsSelection`` bit 7), otherwise from ``hhea``. Pango gives the extents
-of whichever fonts it used for a run, and no line gap.
+USE_TYPO_METRICS (``fsSelection`` bit 7), otherwise from ``hhea`` (from OS/2 when ``hhea``
+has neither ascender nor descender). Pango gives the extents of whichever fonts it used for
+a run, and no line gap.
 
 The metrics are fractions of the em, so they do not depend on the font size. They are
 cached per font configuration: by the font-selecting properties of the style, and by font
@@ -101,6 +102,16 @@ def _read_metrics(hb_face) -> FontMetrics:
         ascender, descender, line_gap = struct.unpack_from(">hhh", os2, 68)
     else:
         ascender, descender, line_gap = struct.unpack_from(">hhh", hhea, 4)
+        if ascender == descender == 0:
+            # An empty hhea: like FreeType (and so Pango), the OS/2 typo values, else the
+            # Windows ones (unsigned, the descender below the baseline, no line gap).
+            if len(os2) >= 74 and any(struct.unpack_from(">hh", os2, 68)):
+                ascender, descender, line_gap = struct.unpack_from(">hhh", os2, 68)
+            elif len(os2) >= 78 and any(struct.unpack_from(">HH", os2, 74)):
+                win_ascent, win_descent = struct.unpack_from(">HH", os2, 74)
+                ascender, descender, line_gap = win_ascent, -win_descent, 0
+            else:
+                return _NO_TABLES
     return FontMetrics(ascender / units_per_em, -descender / units_per_em, line_gap / units_per_em)
 
 

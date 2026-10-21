@@ -83,6 +83,24 @@ def typo_dejavu(tmp_path: Path) -> str:
     return path.as_uri()
 
 
+def zeroed_dejavu(tmp_path: Path, typo: bool = False) -> str:
+    """The file:// URL of a copy of DejaVu Sans, written to ``tmp_path``, whose hhea
+    ascender, descender and line gap are 0, and with ``typo`` its OS/2 typo values too,
+    for @font-face rules.
+
+    Its OS/2 values: typo ascender 1556, descender -492, line gap 410; usWinAscent 1901,
+    usWinDescent 483 (of 2048 units per em).
+    """
+    font = TTFont(font_url("DejaVuSans.ttf").removeprefix("file://"))
+    font["hhea"].ascent = font["hhea"].descent = font["hhea"].lineGap = 0
+    if typo:
+        os2 = font["OS/2"]
+        os2.sTypoAscender = os2.sTypoDescender = os2.sTypoLineGap = 0
+    path = tmp_path / "DejaVuSans-zeroed.ttf"
+    font.save(path)
+    return path.as_uri()
+
+
 def render(html: str) -> weasyprint.Document:
     """Lay out ``html`` with WeasyPrint's default options."""
     return weasyprint.HTML(string=html).render()
