@@ -1,4 +1,5 @@
-"""Line metrics of the first available font of a style, read from the font's own tables.
+"""Line metrics and glyph coverage of the first available font of a style, read from the
+font's own tables.
 
 Browsers and Prince size lines from the ascender A, descender D and line gap G of the
 element's first available font: from the OS/2 typo values when the font sets
@@ -47,6 +48,35 @@ def primary_metrics(style) -> FontMetrics:
             by_style[key] = _font_metrics(style.font_config, line.runs.data.item.analysis.font)
         layout.deactivate()
     return by_style[key]
+
+
+def primary_has_char(style, char: str) -> bool:
+    """Whether the first available font of ``style`` has a glyph for ``char``: Pango
+    shapes ``char`` with the font it uses for a space, not with a fallback font.
+
+    Cached per font configuration and character, like primary_metrics()."""
+    by_style = vars(style.font_config).setdefault("_platen_coverage_by_style", {})
+    key = _font_style_cache_key(style), char
+    if key not in by_style:
+        primary, shaped = Layout(style), Layout(style)
+        primary.set_text(" ")
+        shaped.set_text(char)
+        primary_runs = primary.get_first_line()[0].runs
+        shaped_runs = shaped.get_first_line()[0].runs
+        by_style[key] = (
+            ffi.NULL not in (primary_runs, shaped_runs)
+            and _face_address(primary_runs.data.item.analysis.font)
+            == _face_address(shaped_runs.data.item.analysis.font)
+            and not shaped_runs.data.glyphs.glyphs[0].glyph & pango.PANGO_GLYPH_UNKNOWN_FLAG
+        )
+        primary.deactivate()
+        shaped.deactivate()
+    return by_style[key]
+
+
+def _face_address(pango_font) -> int:
+    hb_face = harfbuzz.hb_font_get_face(pango.pango_font_get_hb_font(pango_font))
+    return int(ffi.cast("uintptr_t", hb_face))
 
 
 def _font_metrics(font_config, pango_font) -> FontMetrics:

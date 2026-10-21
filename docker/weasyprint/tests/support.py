@@ -3,8 +3,8 @@
 Every length is in pt (1 CSS px = 0.75 pt). Positions are measured from the top-left
 corner of the page, y growing downwards, as in the CSS layout. Pages count from 0.
 
-Layout helpers (render, runs, lines, baselines, line_extents, sup_style, growth_above,
-margin_boxes, texts) read WeasyPrint's box tree;
+Layout helpers (render, runs, all_text, lines, baselines, line_extents, sup_style,
+growth_above, margin_boxes, texts) read WeasyPrint's box tree;
 PDF helpers (pdf_fonts, page_group_cs, content) read the written PDF with pypdf.
 """
 
@@ -112,6 +112,11 @@ def runs(doc: weasyprint.Document, page: int = 0) -> list[Run]:
     """Every text box of the page in document order: page content, footnotes, then
     margin boxes. Absolutely positioned and fixed boxes are included."""
     return [_run(box) for box in _boxes(doc, page) if isinstance(box, boxes.TextBox)]
+
+
+def all_text(doc: weasyprint.Document) -> str:
+    """The text of the text boxes of runs() on every page, in page order, concatenated."""
+    return "".join(run.text for page in range(len(doc.pages)) for run in runs(doc, page))
 
 
 def lines(doc: weasyprint.Document, page: int = 0) -> list[list[Run]]:
