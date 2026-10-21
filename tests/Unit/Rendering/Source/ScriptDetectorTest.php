@@ -29,5 +29,24 @@ final class ScriptDetectorTest extends TestCase
         yield 'body onload' => ['<body onload="f()">', true];
         yield 'text containing on' => ['<p>onboarding = fun</p>', false];
         yield 'unquoted onerror' => ['<img src=x onerror=alert(1)>', true];
+        yield 'handler after a greater-than in a quoted attribute' => ['<a title="a>b" onclick=f()>', true];
+        yield 'handler value mentioning another handler in text' => ['<p title="onclick=x">t</p>', false];
+        yield 'svg script' => ['<svg><script>f()</script></svg>', true];
+        yield 'template' => ['<template><b onclick=f()>x</b></template>', true];
+    }
+
+    #[Test]
+    public function itIsRightOnMultiMegabyteDocuments(): void
+    {
+        $image = '<img src="data:image/png;base64,'.str_repeat('QUJD', 1_000_000).'">';
+
+        $start = hrtime(true);
+        $plain = ScriptDetector::needsBrowser('<p>a</p>'.$image.'<p>b</p>');
+        $elapsedMs = (hrtime(true) - $start) / 1e6;
+        $handled = ScriptDetector::needsBrowser($image.'<button onclick="f()">x</button>');
+
+        self::assertFalse($plain);
+        self::assertTrue($handled);
+        self::assertLessThan(2000, $elapsedMs);
     }
 }
