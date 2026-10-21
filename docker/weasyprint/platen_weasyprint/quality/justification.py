@@ -12,7 +12,10 @@ InDesign and TeX); WeasyPrint only ever stretched them.
   line is set to exactly the available width (``justify_line`` with negative extra space
   when it is too wide); a line aligned otherwise (the last line, unless
   ``text-align-last: justify``) keeps its natural spaces when it fits and is compressed to
-  fit when it does not. A line too wide even when compressed stays compressed.
+  fit when it does not. A line too wide even when compressed stays compressed. As in
+  WeasyPrint's stretching, the extra space (negative too) is the same for every space of
+  the line, so on a line that mixes font sizes the spaces of the smaller text may shrink
+  by more than 1/6 of their width.
 
 Preferred widths (min-content and max-content) keep natural spaces: only the line layout
 of split_text_box compresses, and only the boxes it returns carry the negative spacing.
@@ -26,6 +29,8 @@ MIN_SPACE = 5 / 6
 
 _COLLAPSE = ("normal", "nowrap", "pre-line")
 _COLLAPSE_AND_WRAP = ("normal", "pre-line")
+# The characters that WeasyPrint's Layout.set_text gives word and justification spacing.
+_LEADING_SPACES = (b" ", " ".encode())
 
 
 def _compressible(style) -> bool:
@@ -120,15 +125,16 @@ def apply() -> None:
         try:
             new_box, resume_index, preserved_line_break = original_split_text_box(
                 context, box, available_width, skip, is_line_start)
-            if (text.startswith(b" ") and not lone_space and new_box is not None
+            if (text.startswith(_LEADING_SPACES) and not lone_space and new_box is not None
                     and available_width is not None and new_box.width > available_width):
-                # WeasyPrint doubles the spacing of a space that starts the text, as Pango
-                # gives half of it at the start of a line, but Pango breaks lines with all
-                # of it: this line may be up to one spacing too wide. Break again with one
-                # spacing less, as Pango then sees the line as wide as it is.
+                # WeasyPrint doubles the spacing of a space (or no-break space) that starts
+                # the text, as Pango gives half of it at the start of a line, but Pango
+                # breaks lines with all of it: this line may be up to one spacing too wide.
+                # Break again with one spacing less, as Pango then sees the line as wide as
+                # it is. No box means the line ends at that space, as at natural spacing.
                 retry = original_split_text_box(
                     context, box, available_width + spacing, skip, is_line_start)
-                if retry[0] is not None and retry[0].width <= available_width:
+                if retry[0] is None or retry[0].width <= available_width:
                     new_box, resume_index, preserved_line_break = retry
         finally:
             box.justification_spacing = previous_spacing

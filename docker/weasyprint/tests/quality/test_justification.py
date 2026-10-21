@@ -101,5 +101,26 @@ def test_text_after_an_inline_element_never_overflows():
     assert overflowing == []
 
 
+def test_word_after_an_inline_element_moves_to_the_next_line_whole():
+    # The text box after </span> starts with a space and its first word does not fit: the
+    # line ends at that space, as at natural spacing.
+    overflowing = []
+    for tenth in range(1545, 1555):
+        doc = paragraph(tenth / 10, '<span style="font-size: 14pt">extraordinary</span> information <b>of</b> x')
+        if any(l[-1].x + l[-1].width > box_right_of(doc) + 0.01 for l in lines(doc)):
+            overflowing.append(tenth / 10)
+    assert overflowing == []
+
+
+def test_text_after_an_inline_element_and_nbsp_never_overflows():
+    # WeasyPrint doubles the spacing of a no-break space that starts a text box too.
+    overflowing = []
+    for tenth in range(1330, 1340):
+        doc = paragraph(tenth / 10, "<b>ff</b>&nbsp;evaluation extraordinary <b>information</b> x")
+        if any(l[-1].x + l[-1].width > box_right_of(doc) + 0.01 for l in lines(doc)):
+            overflowing.append(tenth / 10)
+    assert overflowing == []
+
+
 def test_text_align_last_justify_fills_last_line():
     assert last_line_right(align_last="justify") == approx(box_right, abs=0.01)
