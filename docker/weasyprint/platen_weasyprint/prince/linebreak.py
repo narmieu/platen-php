@@ -32,20 +32,23 @@ WeasyPrint lays out one line at a time, so the patch plans, then forces:
   (with the hyphen), without letting Pango break. Their spaces are compressed further
   than the model allows, so that the line never overflows for WeasyPrint; text_align
   (F8) then restores the spaces and justifies the line to exactly the available width.
+  When the break ends inline boxes, split_inline_box ends the line after the outermost
+  of them, so that they keep their end decoration.
 - Fallback: content the model does not cover keeps the quality layer's greedy breaking
   for the whole paragraph: atomic inlines, floats and other out-of-flow boxes,
   ``::first-line`` and ``::first-letter``, break opportunities other than spaces and
   hyphens, letter- or word-spacing, right-to-left text, spaces in white space other than
   ``normal`` and ``pre-line``, and a word wider than the line. So does a planned line
   whose actual end or width differs from the plan (a float beside it, a width Pango
-  measures differently): that line is laid out again greedily, and the rest of the
-  paragraph too.
+  measures differently), or whose spaces would have to shrink below 5/6: that line is
+  laid out again greedily, and the rest of the paragraph too.
 
 A no-break space keeps its natural width in justified and compressed lines, as in Prince:
 Layout.set_text and count_expandable_spaces leave it out of the justification spacing
 (``word-spacing`` still applies to it).
 """
 
+import array
 import bisect
 import re
 from dataclasses import dataclass, field
@@ -71,6 +74,11 @@ FINAL_HYPHEN = 0      # demerits for a hyphen on the second-to-last line (TeX: 5
 # While a planned line is laid out its spaces are this fraction of their width, less than
 # the 5/6 the model allows, so that measurement differences never make it overflow.
 _FORCED_SPACE = 1 / 2
+# How much wider than the available width a planned line may be with its spaces at 5/6,
+# in em of the paragraph's font size: what WeasyPrint's shaping adds to the model (the
+# kerning of a letter with the hyphen added at a break, 0.016em at most on the measured
+# paragraphs), not model errors.
+_TOLERANCE = 0.03
 
 # Widths are measured at up to _MEASURE_SCALE times the font size, the text staying under
 # _MEASURE_LIMIT px (a character is at most about an em wide; Pango's limit is 2**21 px).
@@ -288,6 +296,14 @@ class _Atom:
 
 
 @dataclass(frozen=True, slots=True)
+class _Decoration:
+    """The margin, border and padding at the start or the end of an inline box."""
+
+    width: float
+    start: bool
+
+
+@dataclass(frozen=True, slots=True)
 class _Break:
     """Where a line ending at an item ends in the text box of ``atom``: its text up to
     byte ``end`` (plus the hyphen when ``hyphen``), the next line resuming at ``resume``."""
@@ -300,7 +316,7 @@ class _Break:
 
 def _content(linebox, start, containing_block) -> list:
     """The in-flow content of ``linebox`` from the skip stack ``start``, in order: an
-    _Atom per text box and the width of each inline box's start and end decoration."""
+    _Atom per text box and a _Decoration for each inline box's start and end."""
     content = []
 
     def walk(box, stack, path):
@@ -321,9 +337,9 @@ def _content(linebox, start, containing_block) -> list:
                 if (left or right) and child.style["box_decoration_break"] == "clone":
                     raise _Unsupported
                 if child_stack_i is None:
-                    content.append(left)
+                    content.append(_Decoration(left, start=True))
                 walk(child, child_stack_i, path + (i,))
-                content.append(right)
+                content.append(_Decoration(right, start=False))
             else:
                 raise _Unsupported
 
@@ -341,7 +357,7 @@ def _check(atom) -> bool:
     """Whether the atom's text wraps; raise _Unsupported for text the model does not cover."""
     style = atom.box.style
     wraps = style["white_space"] in ("normal", "pre-line")
-    if (style["direction"] == "rtl" or style["letter_spacing"] != "normal"
+    if (style["direction"] == "rtl" or style["letter_spacing"] not in ("normal", 0)
             or style["word_spacing"] or style["word_break"] != "normal" or not style["font_size"]
             or "\t" in atom.text or ("\n" in atom.text and style["white_space"] != "pre-line")
             or (not wraps and " " in atom.text)):
@@ -361,6 +377,12 @@ def _scaled(style, length: int):
     scaled = style.copy()
     scaled["font_size"] = size * factor
     return scaled, factor
+
+
+# PangoGlyphInfo read as 32-bit integers: the index of geometry.width, and the step.
+_GLYPH_SIZE = ffi.sizeof("PangoGlyphInfo")
+_GLYPH_WIDTH = ffi.offsetof("PangoGlyphInfo", "geometry") // 4
+_GLYPH_STEP = _GLYPH_SIZE // 4
 
 
 class _Positions:
@@ -384,12 +406,17 @@ class _Positions:
                         layout.deactivate()
                         raise _Unsupported  # right-to-left text in the paragraph
                     glyphs = run.glyphs
-                    for i in range(glyphs.num_glyphs):
-                        cluster = base + run.item.offset + glyphs.log_clusters[i]
+                    count = glyphs.num_glyphs
+                    clusters = ffi.unpack(glyphs.log_clusters, count)
+                    infos = array.array("i")
+                    infos.frombytes(ffi.buffer(glyphs.glyphs, count * _GLYPH_SIZE))
+                    start = base + run.item.offset
+                    for cluster, width in zip(clusters, infos[_GLYPH_WIDTH::_GLYPH_STEP]):
+                        cluster += start
                         if not offsets or cluster > offsets[-1]:
                             offsets.append(cluster)
                             xs.append(x)
-                        x += glyphs.glyphs[i].geometry.width
+                        x += width
                     runs = runs.next
                 layout.deactivate()
             else:
@@ -466,7 +493,12 @@ def _segments(context, linebox, content, indent) -> list[tuple[list, list, _Brea
     """The items of the paragraph, split at forced breaks: (items, sources, end) for each
     segment. ``sources[i]`` is the _Break of a Glue or Penalty, the _Atom of a Box of text,
     None for other boxes; ``end`` is the _Break of the forced break ending the segment, or
-    None at the end of the paragraph."""
+    None at the end of the paragraph.
+
+    A break between two text boxes (at a space ending the first, or after a hyphen ending
+    it) comes after the end decorations of the inline boxes closing there and before the
+    start decorations of those opening there: a line ending there ends those boxes, and the
+    next line starts the others."""
     atoms = [entry for entry in content if isinstance(entry, _Atom)]
     text = "".join(atom.text for atom in atoms)
     attrs = get_log_attrs(text, linebox.style["lang"])
@@ -477,6 +509,17 @@ def _segments(context, linebox, content, indent) -> list[tuple[list, list, _Brea
         sources.append(None)
     position = 0  # index in ``text`` of the atom's first character
     previous = None
+    held = []  # (Glue, _Break) of a space ending the previous atom
+    boundary = None  # where the items between two atoms split: after end decorations
+
+    def release():
+        nonlocal held, boundary
+        if boundary is None:
+            boundary = len(items)
+            for item, source in held:
+                items.append(item)
+                sources.append(source)
+            held = []
 
     def add_box(atom, x, start, end):
         if end > start:
@@ -484,11 +527,14 @@ def _segments(context, linebox, content, indent) -> list[tuple[list, list, _Brea
             sources.append(atom)
 
     for entry in content:
-        if not isinstance(entry, _Atom):
-            if entry:
-                items.append(Box(entry))
+        if isinstance(entry, _Decoration):
+            if entry.start:
+                release()
+            if entry.width:
+                items.append(Box(entry.width))
                 sources.append(None)
             continue
+        release()
         atom = entry
         style = atom.box.style
         wraps = _check(atom)  # text that does not wrap (a list marker) is one box
@@ -519,8 +565,9 @@ def _segments(context, linebox, content, indent) -> list[tuple[list, list, _Brea
                     add_box(atom, x, run_start, byte)
                     end = byte if i else len(owner.box.text.encode())
                     width = _hyphen_width(context, owner.box.style) if hyphen else 0.0
-                    items.append(Penalty(width))
-                    sources.append(_Break(owner, end, end, hyphen))
+                    index = len(items) if i else boundary
+                    items.insert(index, Penalty(width))
+                    sources.insert(index, _Break(owner, end, end, hyphen))
                     run_start = byte
             elif byte in points:
                 add_box(atom, x, run_start, byte)
@@ -529,8 +576,12 @@ def _segments(context, linebox, content, indent) -> list[tuple[list, list, _Brea
                 run_start = byte
             byte += size
         add_box(atom, x, run_start, byte)
+        if items and isinstance(items[-1], Glue) and sources[-1] == _Break(atom, byte - 1, byte):
+            held = [(items.pop(), sources.pop())]
+        boundary = None
         position += len(atom.text)
         previous = atom
+    release()
     segments.append((items, sources, None))
     # Spaces at the start and the end of a segment are removed from the lines.
     trimmed = []
@@ -554,9 +605,11 @@ _END = "end"
 @dataclass
 class _LinePlan:
     """A planned line: the text boxes it lays out (id → None for the whole remaining text,
-    else (end, resume, hyphen)) and the key of the next line's start (_END at the end)."""
+    else (end, resume, hyphen)), the line or inline box whose children it lays out only up
+    to an index (id → index), and the key of the next line's start (_END at the end)."""
 
     boxes: dict
+    stops: dict
     next: object
 
 
@@ -574,7 +627,7 @@ class _Paragraph:
 class _Forcing:
     """The line being laid out to plan."""
 
-    boxes: dict
+    plan: _LinePlan
     width: float
     diverged: bool = False
 
@@ -603,6 +656,22 @@ def _next_key(linebox, resume_at):
     return _END if stack == "continue" else _key(stack)
 
 
+def _stop(linebox, path):
+    """(parent, its path, child index) where the line must end when it ends with the text
+    box at ``path``, because that box ends inline boxes: after the outermost of them, so
+    that they keep their end decoration (WeasyPrint removes it from a box the line ends
+    inside). None when no inline box ends there."""
+    nodes = [linebox]
+    for index in path[:-1]:
+        nodes.append(nodes[-1].children[index])
+    level = len(path) - 1
+    while level > 0 and path[level] == len(nodes[level].children) - 1:
+        level -= 1
+    if level == len(path) - 1 or path[level] + 1 >= len(nodes[level].children):
+        return None
+    return nodes[level], path[:level], path[level] + 1
+
+
 def _fits(items, start, end, width) -> bool:
     """Whether the line of items[start:end] fits ``width`` with its spaces shrunk."""
     natural = shrink = 0.0
@@ -629,21 +698,30 @@ def _plan(context, linebox, start, containing_block, width) -> dict:
         for k in breaks(items, width):
             if not _fits(items, line_start, k, width):
                 raise _Unsupported  # a word wider than the line
-            planned = {}
+            planned, stops = {}, {}
             for source in sources[line_start:k]:
                 atom = source.atom if isinstance(source, _Break) else source
                 if atom is not None:
                     planned[id(atom.box)] = None
             if k < len(items):
                 cut = sources[k]
-                planned[id(cut.atom.box)] = cut.end, cut.resume, cut.hyphen
-                resume_at = _stack(cut.atom.path, cut.resume)
+                stop = None
+                if cut.resume == len(cut.atom.box.text.encode()):
+                    stop = _stop(linebox, cut.atom.path)
+                if stop is None:
+                    planned[id(cut.atom.box)] = cut.end, cut.resume, cut.hyphen
+                    resume_at = _stack(cut.atom.path, cut.resume)
+                else:
+                    parent, path, index = stop
+                    planned[id(cut.atom.box)] = cut.end, None, cut.hyphen
+                    stops[id(parent)] = index
+                    resume_at = _stack(path, index)
             elif end is not None:
                 planned[id(end.atom.box)] = None  # split_text_box breaks at the newline
                 resume_at = _stack(end.atom.path, end.resume)
             else:
                 resume_at = None
-            lines[key] = _LinePlan(planned, _next_key(linebox, resume_at))
+            lines[key] = _LinePlan(planned, stops, _next_key(linebox, resume_at))
             key = lines[key].next
             line_start = k + 1
             while line_start < len(items) and isinstance(items[line_start], Glue):
@@ -699,6 +777,25 @@ def _set_no_break_spaces(layout) -> None:
     pango.pango_layout_set_attributes(layout.layout, attr_list)
 
 
+def _text_boxes(box):
+    """The in-flow text boxes of a line box or inline box, recursively."""
+    for child in box.children:
+        if isinstance(child, boxes.TextBox):
+            yield child
+        elif isinstance(child, boxes.InlineBox) and child.is_in_normal_flow():
+            yield from _text_boxes(child)
+
+
+def _shrinks_to(line) -> float:
+    """The width of a line laid out to plan with its spaces shrunk to the model's limit:
+    its compressed width plus, for each space, its compression minus SHRINK of its width."""
+    width = line.width
+    for box in _text_boxes(line):
+        if spaces := box.text.count(" "):
+            width += spaces * (-box.justification_spacing - SHRINK * _space_width(box.style))
+    return width
+
+
 def count_expandable_spaces(box) -> int:
     """Count the spaces that justification stretches and compresses: word spaces (U+0020),
     not no-break spaces."""
@@ -712,6 +809,7 @@ def count_expandable_spaces(box) -> int:
 def apply() -> None:
     inline = weasyprint.layout.inline
     original_get_next_linebox = inline.get_next_linebox
+    original_split_inline_box = inline.split_inline_box
     previous_split_text_box = inline.split_text_box
     previous_text_align = inline.text_align
     previous_set_text = Layout.set_text
@@ -734,7 +832,7 @@ def apply() -> None:
         if planned is None:
             return original_get_next_linebox(*arguments)
         paragraph, line_plan = planned
-        forcing = _Forcing(line_plan.boxes, paragraph.width)
+        forcing = _Forcing(line_plan, paragraph.width)
         outer = vars(context).get("_platen_forcing")
         context._platen_forcing = forcing
         try:
@@ -749,9 +847,9 @@ def apply() -> None:
 
     def split_text_box(context, box, available_width, skip, is_line_start=True):
         forcing = vars(context).get("_platen_forcing")
-        if forcing is None or forcing.diverged or id(box) not in forcing.boxes:
+        if forcing is None or forcing.diverged or id(box) not in forcing.plan.boxes:
             return previous_split_text_box(context, box, available_width, skip, is_line_start)
-        planned = forcing.boxes[id(box)]
+        planned = forcing.plan.boxes[id(box)]
         skip = skip or 0
         if planned is None:
             source, resume_index = box, None
@@ -777,14 +875,43 @@ def apply() -> None:
             return previous_split_text_box(context, box, available_width, skip, is_line_start)
         return new_box, index, preserved_line_break
 
+    def split_inline_box(context, box, position_x, max_x, bottom_space, skip_stack,
+                         containing_block, absolute_boxes, fixed_boxes, line_placeholders,
+                         waiting_floats, line_children, first_letter_style, first_line_style):
+        arguments = (
+            context, box, position_x, max_x, bottom_space, skip_stack, containing_block,
+            absolute_boxes, fixed_boxes, line_placeholders, waiting_floats, line_children,
+            first_letter_style, first_line_style)
+        forcing = vars(context).get("_platen_forcing")
+        if forcing is None or forcing.diverged or id(box) not in forcing.plan.stops:
+            return original_split_inline_box(*arguments)
+        # The line ends before child ``stop``: lay out the children before it only.
+        stop = forcing.plan.stops[id(box)]
+        children = box.children
+        box.children = children[:stop]
+        try:
+            new_box, resume_at, *rest = original_split_inline_box(*arguments)
+        finally:
+            box.children = children
+        if resume_at is None:
+            resume_at = {stop: None}
+            if not isinstance(box, boxes.LineBox):
+                new_box.remove_decoration(start=False, end=True)  # the box goes on
+        return new_box, resume_at, *rest
+
     def text_align(context, line, available_width, last):
         forcing = vars(context).get("_platen_forcing")
-        if forcing is not None and abs(available_width - forcing.width) > 1e-6:
+        if forcing is not None and not forcing.diverged and (
+                abs(available_width - forcing.width) > 1e-6
+                or _shrinks_to(line) > available_width + _TOLERANCE * line.style["font_size"]):
+            # Narrower than planned (a float), or the plan's widths were wrong: the line's
+            # spaces would have to shrink below 5/6.
             forcing.diverged = True
         return previous_text_align(context, line, available_width, last)
 
     Layout.set_text = set_text
     inline.get_next_linebox = get_next_linebox
+    inline.split_inline_box = split_inline_box
     inline.split_text_box = split_text_box
     inline.text_align = text_align
     inline.count_expandable_spaces = count_expandable_spaces

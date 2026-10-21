@@ -1,13 +1,15 @@
 import json
 import math
-import time
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 from platen_weasyprint.prince import linebreak
 from platen_weasyprint.prince.linebreak import Box, Glue, Penalty, badness, breaks, demerits
 from pytest import approx
-from support import PT_PER_PX, face, lines, render
+from support import PT_PER_PX, all_text, face, lines, render
 from weasyprint.formatting_structure import boxes
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "prince_linebreak.json").read_text(encoding="utf-8"))
@@ -123,6 +125,65 @@ def test_unsupported_content_keeps_greedy_breaking():
         assert len("".join(run.text for run in first_line).split()) == words
 
 
+def test_letter_spacing_zero_is_planned():
+    html = " ".join(["nn"] * 17 + ["ii", "ii"])  # the worked example: Prince 16 words, first fit 17
+    first_line = lines(render(f"{HEAD}<p style='width: 262.109pt; letter-spacing: 0'>{html}</p>"))[0]
+    assert len("".join(run.text for run in first_line).split()) == 16
+
+
+WORDS = "alpha beta gamma lambda delta pi".split()
+
+
+def greedy(monkeypatch, html: str):
+    """``html`` rendered with first fit instead of the plan."""
+    with monkeypatch.context() as patch:
+        patch.setattr(linebreak, "_planned_line", lambda *args: None)
+        return render(html)
+
+
+def smallest_spacing(doc) -> float:
+    """The smallest justification spacing of the text boxes with spaces, in pt: at least
+    -SPACE / 6 when spaces never shrink below 5/6."""
+    return min(box.justification_spacing * PT_PER_PX for box in doc.pages[0]._page_box.descendants()
+               if isinstance(box, boxes.TextBox) and " " in box.text)
+
+
+def test_forced_lines_never_shrink_spaces_below_five_sixths(monkeypatch):
+    # The padding and border that start each span go on the line after a break at "co-".
+    html = f"{HEAD}<p style='width: 250.1pt'>" + " ".join(
+        f"co-<span style='padding-left: 20pt; border-left: 1pt solid'>operate</span> {WORDS[i % 6]} {WORDS[(i + 2) % 6]}"
+        for i in range(14)) + "</p>"
+    doc = render(html)
+    assert smallest_spacing(doc) >= -SPACE / 6 - 0.001
+    assert "".join(all_text(doc).split()) == "".join(all_text(greedy(monkeypatch, html)).split())
+
+
+def test_lines_that_cannot_shrink_as_planned_fall_back(monkeypatch):
+    # Widths measured 3% short: some planned lines need spaces below 5/6, so the paragraph
+    # is laid out again with first fit from there.
+    vector = next(vector for vector in FIXTURE["vectors"] if vector["id"] == "W1")
+    measure = linebreak._Positions.__call__
+    monkeypatch.setattr(linebreak._Positions, "__call__", lambda self, offset: 0.97 * measure(self, offset))
+    doc = render(f"{HEAD}<p style='width: {vector['width_pt']}pt'>{vector['html']}</p>")
+    assert smallest_spacing(doc) >= -SPACE / 6 - 0.001
+
+
+@pytest.mark.parametrize("width", range(150, 211, 10))
+def test_breaks_at_the_end_of_an_inline_box_keep_its_end_decoration(width, monkeypatch):
+    # Thirty spans that end with a space, an explicit hyphen or a soft hyphen.
+    endings = ["two </span>next", "co-</span>operate", "ex&shy;</span>ample"]
+    html = (f"{HEAD}<style>span {{ border: 1pt solid; padding: 0 3pt }}</style><p style='width: {width}pt'>"
+            + " ".join(f"<span>{WORDS[i % 6]} {endings[i % 3]}" for i in range(30)) + "</p>")
+
+    def borders(doc):
+        spans = [box for box in doc.pages[0]._page_box.descendants()
+                 if isinstance(box, boxes.InlineBox) and box.element_tag == "span"]
+        return sum(span.border_left_width > 0 for span in spans), sum(span.border_right_width > 0 for span in spans)
+
+    planned, first_fit = borders(render(html)), borders(greedy(monkeypatch, html))
+    assert planned == (30, 30) and planned[1] >= first_fit[1]
+
+
 def test_plan_survives_page_breaks():
     # A measured paragraph of 20 lines, 15 of which first fit breaks differently, over 4 pages.
     vector = next(vector for vector in FIXTURE["vectors"] if vector["id"] == "L0")
@@ -153,8 +214,31 @@ def test_breaks_like_prince(vector):
     assert paragraph_lines(vector["width_pt"], vector["html"], vector["css"]) == expected
 
 
-def test_rendering_time(monkeypatch):
-    # 16 justified paragraphs of a certificate page: 8pt, line-height 1.6, 470pt wide.
+# Renders the document on stdin with the layers, as the Prince tests apply them, 9 times
+# with the plan and 9 times without, interleaved in alternating order so that a slower
+# moment of the machine hits both; prints the shortest CPU time of each.
+TIMING = """
+import sys, time
+import conftest
+from platen_weasyprint.prince import linebreak
+from support import render
+html = sys.stdin.read()
+planned_line = linebreak._planned_line
+timings = {True: [], False: []}
+for i in range(9):
+    for planned in (True, False)[::1 if i % 2 else -1]:
+        linebreak._planned_line = planned_line if planned else (lambda *args: None)
+        start = time.process_time()
+        doc = render(html)
+        timings[planned].append(time.process_time() - start)
+print(min(timings[True]), min(timings[False]))
+"""
+
+
+def test_rendering_time():
+    # 16 justified paragraphs of a certificate page: 8pt, line-height 1.6, 470pt wide. Timed
+    # in a process of its own, as weasyprint-platen renders: in pytest's process the
+    # timings vary much more from run to run.
     words = ("assessment candidate demonstrated exceptional understanding of complex texts "
              "reasoning from limited information and solving problems in new situations with a "
              "high degree of accuracy and speed while the results remain stable across").split()
@@ -162,16 +246,11 @@ def test_rendering_time(monkeypatch):
         f"<p>{' '.join(words[(i * 7 + j) % len(words)] for j in range(60 + 5 * (i % 4)))}.</p>" for i in range(16))
     html = (f"{HEAD}<style>p {{ width: 470pt; font-size: 8pt; line-height: 1.6; margin-bottom: 6pt }}"
             f"</style>{paragraphs}")
-
-    def best_of(count):
-        timings = []
-        for _ in range(count):
-            start = time.perf_counter()
-            render(html)
-            timings.append(time.perf_counter() - start)
-        return min(timings)
-
-    planned = best_of(5)
-    monkeypatch.setattr(linebreak, "_planned_line", lambda *args: None)
-    greedy = best_of(5)
+    tests = Path(__file__).resolve().parent
+    package = Path(linebreak.__file__).resolve().parents[2]  # the platen_weasyprint this process tests
+    path = [str(tests), str(tests.parent), str(package), os.environ.get("PYTHONPATH", "")]
+    result = subprocess.run([sys.executable, "-c", TIMING], input=html, capture_output=True, text=True,
+                            env={**os.environ, "PYTHONPATH": os.pathsep.join(path)})
+    assert result.returncode == 0, result.stderr
+    planned, greedy = map(float, result.stdout.split())
     assert planned <= 1.2 * greedy + 0.01, (planned, greedy)

@@ -474,7 +474,9 @@ text_align (F8) justifies it. Content the model does not cover keeps first fit f
 paragraph: atomic inlines, floats and other out-of-flow boxes, `::first-line`,
 `::first-letter`, break opportunities other than spaces and hyphens (`/`, dashes, CJK),
 letter- or word-spacing, right-to-left text, a word wider than the line; so does a planned
-line whose actual end or width differs from the plan (a float beside the paragraph).
+line whose actual end or width differs from the plan (a float beside the paragraph) or
+whose spaces would shrink below 5/6 (beyond 0.03em of shaping differences, such as the
+kerning of a letter with the added hyphen).
 Results on platen, 1215 paragraphs: 1207 as Prince (8 known exceptions: the tie, a soft
 hyphen directly before an explicit hyphen, 6 `hyphens: auto` paragraphs with Prince-only
 or pyphen-only points), first fit 624.
