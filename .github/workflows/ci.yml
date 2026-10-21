@@ -68,6 +68,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends qpdf \
             libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core fonts-liberation
+          sudo cp docker/fontconfig/45-platen.conf /etc/fonts/conf.d/
           pipx install --include-deps ./docker/weasyprint
           weasyprint --version
           weasyprint-platen --version

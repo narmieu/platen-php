@@ -34,6 +34,9 @@ RUN set -eux; \
     weasyprint --version; \
     qpdf --version
 
+# Default and generic fonts (serif fallback, Liberation for serif/sans-serif/monospace).
+COPY docker/fontconfig/45-platen.conf /etc/fonts/conf.d/45-platen.conf
+
 # weasyprint-platen: WeasyPrint with platen's quality fixes, plus the Prince compatibility
 # fixes when given --platen-prince.
 COPY docker/weasyprint /opt/platen-weasyprint
