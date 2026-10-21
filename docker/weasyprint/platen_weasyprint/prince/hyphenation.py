@@ -8,6 +8,8 @@ import pyphen
 
 from ..quality.hyphenation import set_hyphen, set_resolver
 
+# Known gap: pyphen 0.18.1 has no Finnish dictionary, so pyphen.language_fallback("fi") is
+# None and Finnish is not hyphenated at all, where Prince hyphenates it.
 PRINCE_LANGUAGES = {"da", "de", "en_US", "es", "fi", "fr", "is", "it", "lt", "pl", "pt", "ru", "sl", "sv", "th"}
 
 

@@ -305,18 +305,21 @@ and their records and the job queue in SQLite, set up by Doctrine migrations on 
 
 ## Development
 
-You need PHP 8.4 with the `dom`, `pcntl` and `pdo_sqlite` extensions, Composer,
-[WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html) 70 and
-qpdf 11 or later, and Docker for Gotenberg.
+You need PHP 8.4 with the `dom`, `pcntl` and `pdo_sqlite` extensions, Composer, qpdf 11
+or later, Docker for Gotenberg, and WeasyPrint 70.0 ([its system
+libraries](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html)) with platen's
+wrapper and font configuration, installed as CI does:
 
 ```sh
+pipx install --include-deps ./docker/weasyprint   # weasyprint-platen, and WeasyPrint's weasyprint
+sudo cp docker/fontconfig/45-platen.conf /etc/fonts/conf.d/
 composer install
 composer check        # code style, PHPStan at its strictest level, unit tests
 ```
 
-The end-to-end tests start platen themselves and talk to it over HTTP only. They need
-Gotenberg on the host network, with its Chromium pointed at the egress proxy the tests
-start:
+The end-to-end tests start platen themselves and talk to it over HTTP only. They run
+`weasyprint-platen` (and `weasyprint` for the escape hatch), and need Gotenberg on the host
+network, with its Chromium pointed at the egress proxy the tests start:
 
 ```sh
 docker run -d --name gotenberg --network host gotenberg/gotenberg:8.37 \
