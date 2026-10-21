@@ -16,9 +16,10 @@ fail() {
     exit 1
 }
 
-# Posts a document to $1 and prints the HTTP status. The body lands in $work/body.
+# Posts a document to $1 and prints the HTTP status. The body lands in $work/body, the
+# response headers in $work/headers.
 post() {
-    curl -sS -o "$work/body" -w '%{http_code}' -u "$key:" -H 'Content-Type: application/json' -d "$2" "$url$1"
+    curl -sS -o "$work/body" -D "$work/headers" -w '%{http_code}' -u "$key:" -H 'Content-Type: application/json' -d "$2" "$url$1"
 }
 
 json_value() {
@@ -45,6 +46,15 @@ for engine in weasyprint chromium; do
     [ "$status" = 400 ] || fail "$engine reached the cloud metadata address: $status $(cat "$work/body")"
     echo "ok: $engine cannot reach the cloud metadata address"
 done
+
+# DocRaptor's clients send javascript: true with a pipeline number: a document without
+# scripts stays on WeasyPrint, with the Prince layer.
+status=$(post /docs '{"document_type": "pdf", "test": false, "pipeline": "10", "javascript": true,
+    "document_content": "<p style=\"color: rgba(0, 0, 0, 0.5)\">Prince layer</p>"}')
+[ "$status" = 200 ] || fail "pipeline 10: $status $(cat "$work/body")"
+[ "$(head -c 5 "$work/body")" = "%PDF-" ] || fail "pipeline 10 did not return a PDF"
+tr -d '\r' < "$work/headers" | grep -qix 'x-platen-engine: weasyprint' || fail "pipeline 10 did not render with WeasyPrint: $(cat "$work/headers")"
+echo "ok: a script-free JavaScript document with a pipeline number renders with WeasyPrint and the Prince layer"
 
 status=$(post /docs '{"document_type": "pdf", "test": false, "pipeline": "chromium", "ignore_resource_errors": false,
     "document_content": "<img src=\"http://127.0.0.1:3000/health\">"}')
