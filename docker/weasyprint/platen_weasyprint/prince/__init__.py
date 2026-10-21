@@ -9,9 +9,9 @@ they are applied.
 from types import ModuleType
 
 from .. import apply_modules
-from . import colors, font_matching, hyphenation, markers, superscripts
+from . import colors, font_matching, hyphenation, linebreak, markers, superscripts
 
-MODULES: list[ModuleType] = [colors, font_matching, hyphenation, superscripts, markers]
+MODULES: list[ModuleType] = [colors, font_matching, hyphenation, superscripts, markers, linebreak]
 
 _applied: set[ModuleType] = set()
 
