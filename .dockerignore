@@ -1,5 +1,7 @@
 .git
 .github
+.claude
+.superpowers
 .dockerignore
 .env.local
 .env.*.local
@@ -12,3 +14,6 @@ tests
 var
 vendor
 *.md
+docker/weasyprint/tests
+**/__pycache__
+**/.pytest_cache
