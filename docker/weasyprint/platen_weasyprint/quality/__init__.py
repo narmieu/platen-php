@@ -9,7 +9,9 @@ from types import ModuleType
 
 from .. import apply_modules
 
-MODULES: list[ModuleType] = []
+from . import svg
+
+MODULES: list[ModuleType] = [svg]
 
 _applied: set[ModuleType] = set()
 

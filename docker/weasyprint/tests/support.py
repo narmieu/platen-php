@@ -290,3 +290,13 @@ def use_layer(name: str) -> None:
             "their patches apply to the whole process"
         )
     _layer = name
+
+
+def has_rgb_fill(stream: str, rgb: tuple[float, float, float], tol: float = 0.002) -> bool:
+    """Whether the content stream sets a non-stroking RGB colour ("r g b rg") within
+    ``tol`` of ``rgb`` on each channel."""
+    number = r"(-?\d*\.?\d+)"
+    for match in re.finditer(rf"{number}\s+{number}\s+{number}\s+rg\b", stream):
+        if all(abs(float(m) - e) <= tol for m, e in zip(match.groups(), rgb)):
+            return True
+    return False
