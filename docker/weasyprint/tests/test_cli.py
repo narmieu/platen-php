@@ -4,6 +4,8 @@ These tests replace every apply() they reach, so they leave no patch behind for
 the layer folders that run in the same process.
 """
 
+import importlib
+import sys
 import types
 
 import pytest
@@ -55,6 +57,19 @@ def test_environment_variable_asks_for_prince(monkeypatch, tmp_path, value, laye
     out = tmp_path / "out.pdf"
     cli.main([str(src), str(out)])
     assert calls == layers and out.read_bytes().startswith(b"%PDF")
+
+
+def test_version_guard_runs_before_the_layers_are_imported(monkeypatch, tmp_path):
+    # Another WeasyPrint version may have moved the private names the layers import at
+    # import time: importing them fails, and only the version message tells why.
+    for layer in ("quality", "prince"):
+        monkeypatch.delattr(platen_weasyprint, layer)
+        monkeypatch.setitem(sys.modules, f"platen_weasyprint.{layer}", None)
+    monkeypatch.setattr(platen_weasyprint, "cli", cli)
+    monkeypatch.delitem(sys.modules, "platen_weasyprint.cli")
+    monkeypatch.setattr(weasyprint, "__version__", "71.0")
+    with pytest.raises(RuntimeError, match="supports WeasyPrint 70.0, found 71.0"):
+        importlib.import_module("platen_weasyprint.cli").main([str(tmp_path / "in.html"), str(tmp_path / "out.pdf")])
 
 
 def fix_module(name, calls):

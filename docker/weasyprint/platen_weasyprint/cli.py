@@ -9,7 +9,7 @@ WeasyPrint ignores it, while it would reject the flag. The flag is for manual ru
 import os
 import sys
 
-from . import prince, quality
+from . import check_versions
 
 PRINCE_FLAG = "--platen-prince"
 PRINCE_VARIABLE = "PLATEN_WEASYPRINT_PRINCE"
@@ -20,6 +20,11 @@ def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
     with_prince = PRINCE_FLAG in argv or os.environ.get(PRINCE_VARIABLE) == "1"
     argv = [argument for argument in argv if argument != PRINCE_FLAG]
+
+    # Before the layers are imported: they import private names of WeasyPrint, which other
+    # versions may have moved, and only the version message would tell why that fails.
+    check_versions()
+    from . import prince, quality
 
     quality.apply()
     if with_prince:
