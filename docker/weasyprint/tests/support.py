@@ -51,6 +51,20 @@ def font_url(file: str) -> str:
     raise FileNotFoundError(f"{file} is in none of {', '.join(map(str, FONT_DIRS))}")
 
 
+def typo_dejavu(tmp_path: Path) -> str:
+    """The file:// URL of a copy of DejaVu Sans, written to ``tmp_path``, with
+    USE_TYPO_METRICS (OS/2 fsSelection bit 7) set, for @font-face rules.
+
+    Its line metrics are then the OS/2 typo values (ascender 1556, descender -492, line
+    gap 410, of 2048 units per em) instead of the hhea values (1901, -483, 0).
+    """
+    font = TTFont(font_url("DejaVuSans.ttf").removeprefix("file://"))
+    font["OS/2"].fsSelection |= 1 << 7
+    path = tmp_path / "DejaVuSans-typo.ttf"
+    font.save(path)
+    return path.as_uri()
+
+
 def render(html: str) -> weasyprint.Document:
     """Lay out ``html`` with WeasyPrint's default options."""
     return weasyprint.HTML(string=html).render()
