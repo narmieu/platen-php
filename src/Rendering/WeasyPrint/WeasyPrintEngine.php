@@ -58,7 +58,7 @@ final readonly class WeasyPrintEngine
     /**
      * @return list<string>
      */
-    private function arguments(RenderJob $job): array
+    public function arguments(RenderJob $job): array
     {
         $options = $job->options;
         // Prince's defaults and the watermark are user stylesheets: the document's own
@@ -92,6 +92,9 @@ final readonly class WeasyPrintEngine
         }
         if ($options->pdfForms) {
             $arguments[] = '--pdf-forms';
+        }
+        if ($job->princeCompat) {
+            $arguments[] = '--platen-prince';
         }
         if ($options->noCompress) {
             $arguments[] = '--uncompressed-pdf';

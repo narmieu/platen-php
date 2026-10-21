@@ -28,6 +28,8 @@ final readonly class RenderJob
         public ?string $referrer,
         public ?Credentials $credentials,
         public Deadline $deadline,
+        /** Run WeasyPrint with the Prince compatibility layer. */
+        public bool $princeCompat = false,
     ) {
     }
 

@@ -48,6 +48,9 @@ final readonly class PlatenConfig
         public string $egressProxy,
         #[Autowire(env: 'PLATEN_WEASYPRINT_BINARY')]
         public string $weasyprintBinary,
+        /** Imitate Prince when a request names a Prince pipeline number. */
+        #[Autowire(env: 'bool:default:platen_prince_compat_default:PLATEN_PRINCE_COMPAT')]
+        public bool $princeCompat,
         #[Autowire(env: 'PLATEN_QPDF_BINARY')]
         public string $qpdfBinary,
         /** Seconds per document; DocRaptor's limits are 60 (sync) and 600 (async). */

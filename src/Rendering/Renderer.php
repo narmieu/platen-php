@@ -39,8 +39,8 @@ final readonly class Renderer
             throw ApiException::badRequest("document_type {$request->documentType} is not supported yet; use pdf");
         }
 
-        // Only a browser runs JavaScript, so JavaScript documents always use Chromium.
-        $engine = $request->runsJavaScript() ? Engine::Chromium : Engine::fromPipeline($request->pipeline, $this->config->defaultEngine);
+        $choice = EngineChoice::for($request, $this->config);
+        $engine = $choice->engine;
         $profile = PdfProfile::fromPrince($options->profile);
         if (null !== $profile && Engine::Chromium === $engine) {
             $message = 'PDF profiles (PDF/A, PDF/UA, PDF/X) need the weasyprint pipeline';
@@ -84,6 +84,7 @@ final readonly class Renderer
             referrer: $request->referrer,
             credentials: $credentials,
             deadline: $deadline,
+            princeCompat: $choice->princeCompat,
         );
 
         $workspace = Workspace::create($this->config->dataDir.'/tmp');

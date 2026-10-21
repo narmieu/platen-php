@@ -79,6 +79,7 @@ LABEL org.opencontainers.image.title="platen" \
 ENV APP_ENV=prod \
     APP_DEBUG=0 \
     PLATEN_DATA_DIR=/var/lib/platen \
+    PLATEN_WEASYPRINT_BINARY=weasyprint-platen \
     PLATEN_EGRESS_LISTEN=0.0.0.0:3128 \
     PLATEN_MAX_REQUEST_MB=100 \
     PLATEN_PHP_MEMORY_LIMIT=512M

@@ -80,6 +80,8 @@ jobs:
             --chromium-restart-after=0
           timeout 60 bash -c 'until curl -fs http://127.0.0.1:3000/health > /dev/null; do sleep 1; done'
       - run: composer test:e2e
+        env:
+          PLATEN_WEASYPRINT_BINARY: weasyprint-platen
       - name: Gotenberg log
         if: failure()
         run: docker logs gotenberg

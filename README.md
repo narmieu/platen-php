@@ -67,12 +67,26 @@ description and have the same host setting.
 | --- | --- |
 | nothing special | WeasyPrint (or `PLATEN_DEFAULT_ENGINE`) |
 | `"pipeline": "weasyprint"` or `"pipeline": "chromium"` | that engine |
-| a DocRaptor pipeline number such as `"10.1"` | the default engine |
+| a DocRaptor pipeline number such as `"10.1"` | the default engine, with the Prince layer when that is WeasyPrint |
 | `"javascript": true` (or `prince_options.javascript`) | Chromium, the engine that runs scripts |
 
 Like DocRaptor, platen waits for `docraptorJavaScriptFinished()` to return `true` when a
 page defines it, and console output stops rendering unless `ignore_console_messages` is
 set.
+
+## Rendering quality and Prince compatibility
+
+platen runs WeasyPrint through `weasyprint-platen`, a wrapper (`docker/weasyprint`) that
+adds two layers. The layers are being added; the flag plumbing is in place.
+
+| Layer | Applies to | Contains |
+| --- | --- | --- |
+| Quality | every WeasyPrint render | fixes to WeasyPrint's output that are right whatever the document was written for |
+| Prince | only when `pipeline` is a number such as `"10"` or `"10.1"` and `PLATEN_PRINCE_COMPAT` is `true` | behaviour that makes WeasyPrint lay out like Prince |
+
+Requests without a pipeline number never get Prince-layer behaviour. Set
+`PLATEN_PRINCE_COMPAT=false` to turn the Prince layer off for everyone, or
+`PLATEN_WEASYPRINT_BINARY=weasyprint` to run stock WeasyPrint with neither layer.
 
 ## Compatibility
 
@@ -164,7 +178,9 @@ All settings are environment variables; `.env` holds the defaults.
 | `PLATEN_MAX_REQUEST_MB` | `100` | Largest accepted request body |
 | `PLATEN_EGRESS_LISTEN` | `127.0.0.1:3128` (`0.0.0.0:3128` in Docker) | Where the egress proxy listens |
 | `PLATEN_EGRESS_PROXY` | `http://127.0.0.1:3128` | How WeasyPrint and callbacks reach the egress proxy |
-| `PLATEN_WEASYPRINT_BINARY`, `PLATEN_QPDF_BINARY` | `weasyprint`, `qpdf` | The command-line tools platen runs |
+| `PLATEN_WEASYPRINT_BINARY` | `weasyprint-platen` in the Docker image, `weasyprint` otherwise | The WeasyPrint command platen runs. `weasyprint` runs stock WeasyPrint, without either layer |
+| `PLATEN_QPDF_BINARY` | `qpdf` | The qpdf command platen runs |
+| `PLATEN_PRINCE_COMPAT` | `true` | Apply the Prince compatibility layer to requests that send a pipeline number |
 | `PLATEN_PHP_MEMORY_LIMIT` | `512M` | PHP's memory limit in the Docker image |
 | `TRUSTED_PROXIES` | empty | Reverse proxies trusted for `X-Forwarded-*` headers |
 
