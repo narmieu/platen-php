@@ -33,6 +33,7 @@ default):
 - vertical-align: super raises by half the ascender, and sub lowers by half the descender, of the parent's font times the parent's font size; sub and sup are 83% of the parent's size; font-size: smaller divides by 1.2 and larger multiplies by 1.2.
 - Hyphenation uses Prince's dictionaries (da, de, en-US, es, fi, fr, is, it, lt, pl, pt, ru, sl, sv, th); every other language, sr included, gets en-US. The hyphen is always "-" unless the author sets hyphenate-character. Known gap: Finnish (fi) is not hyphenated at all, because pyphen 0.18.1 has no Finnish dictionary (Prince hyphenates it).
 - List markers have no trailing space and sit a fixed 8pt from the content at every font size (mirrored for right-to-left text); marker strings the author wrote keep their spaces.
+- Justified paragraphs break into lines where Prince breaks them: the breaks of the whole paragraph are chosen together (Knuth–Plass, with Prince's measured costs) instead of line by line, and no-break spaces keep their width in justified lines. Paragraphs with content Prince was not measured for (inline images and blocks, floats beside or inside them, breaks after / or dashes, letter- or word-spacing, right-to-left text) still break line by line.
 
 ## Turning it off
 

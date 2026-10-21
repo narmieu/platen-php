@@ -76,7 +76,7 @@ All of the following are **design calls made during analysis; challenge any of t
 | Layer | Applies to | Contents (§5) |
 |---|---|---|
 | Quality | every WeasyPrint render | F2 Prince syntax accepted; F3a honour `-prince-pdf-page-colorspace`; F4a CSS Fonts 4 weight matching; F5 generic and default fonts; F6 line metrics; F7a `sup`/`sub` inherit line-height, CSS 2.1 inline boxes; F8 justification may shrink spaces; F9a hyphenation dictionary per language and script, U+2010 only when the font has it; F11 inline SVG |
-| Prince | `pipeline` is a DocRaptor pipeline number | F1 routing; F3b RGB page group everywhere, neutral colours as DeviceGray; F4b CSS Fonts 3 weight matching; F7b Prince's raise/drop, `sup`/`sub` 83%, `smaller`/`larger` ÷/×1.2; F9b English patterns for languages Prince lacks, hyphen always `-`; F10 list markers |
+| Prince | `pipeline` is a DocRaptor pipeline number | F1 routing; F3b RGB page group everywhere, neutral colours as DeviceGray; F4b CSS Fonts 3 weight matching; F7b Prince's raise/drop, `sup`/`sub` 83%, `smaller`/`larger` ÷/×1.2; F8b Prince's paragraph line breaking for justified text; F9b English patterns for languages Prince lacks, hyphen always `-`; F10 list markers |
 
 Where both layers define the same behaviour (F4, F9) the Prince layer wins when active.
 
@@ -410,8 +410,10 @@ move it to the Prince layer; nothing else depends on the choice.
 
 Measured with ten 22pt words in boxes narrowed in 0.05pt steps:
 - Prince lets word spaces shrink to **5/6 of their natural width** (threshold between
-  0.8316 and 0.8341 at 10pt, between 0.8268 and 0.8365 at 20pt), then breaks greedily
-  (first fit). Free fonts (re-measured 2026-10-21, `justify`, ten 22.25pt words in
+  0.8316 and 0.8341 at 10pt, between 0.8268 and 0.8365 at 20pt). This single-line
+  calibration could not tell how Prince chooses the breaks: it is not first fit, but an
+  optimiser over the whole paragraph (F8b); the quality layer breaks greedily (first fit)
+  with the 5/6 limit. Free fonts (re-measured 2026-10-21, `justify`, ten 22.25pt words in
   Liberation Sans): between 0.8320 and 0.8340 at 10pt, between 0.8320 and 0.8400 at 20pt
   (0.1pt steps); platen the same.
 - Non-last lines are then justified to the full width (stretched or compressed).
@@ -433,10 +435,49 @@ split_text_box`) measures at natural spacing.
   threaded through `create_layout`/`split_first_line`), then in `text_align` justify every
   non-last line to the available width (negative extra allowed) and, for the last line,
   restore natural spacing unless that overflows, in which case compress to fit.
-- Interplay with hyphenation (does Prince try compression before hyphenating?) is not
-  isolated by the calibration; confirm with the IdentyFi annex fixture (§9).
+- Interplay with hyphenation: measured with F8b, compression and hyphenation compete
+  through demerits.
 - Tests: the threshold vector (line 1 keeps 10 words up to 3.45pt over, wraps at 3.50pt at
   10pt); the last-line vector; the 16 IdentyFi paragraphs.
+
+#### F8b. Prince's paragraph line breaking for justified text (Prince layer)
+
+Measured 2026-10-21 on DocRaptor (pipeline 10, six requests, DejaVu Sans, synthetic text:
+1215 paragraphs). Prince breaks justified paragraphs with a Knuth–Plass optimiser over the
+whole paragraph, TeX's formulas with Prince's constants:
+- a word space (U+0020) is glue: natural width w, stretch w/2, shrink w/6; letters,
+  no-break spaces (U+00A0, also fixed when the line is justified), inline margins, borders
+  and padding and `text-indent` are fixed boxes;
+- every hyphenation point (`hyphens: auto`, soft hyphen, after an explicit `-`) is a
+  penalty of 50, flagged; its width is the hyphen's (0 after `-`);
+- badness 100·|r|³, uncapped; a line is feasible up to badness 800 (spaces at most twice
+  their width) and never shrinks below 5/6; demerits (10 + b)² + p², +3000 for two
+  hyphenated lines in a row, nothing for a hyphen on the second-to-last line, no
+  fitness-class demerits;
+- the last line costs nothing when it fits (also under `text-align-last: justify`, which
+  then stretches it) and may shrink, with the shrink's badness; text before `<br>` is a
+  paragraph of its own; ties go to the later break;
+- with no feasible line, the longest line that fits is forced from the earlier break of
+  lowest total demerits, never an overfull line (inferred: the only variant tried that fits
+  all narrow paragraphs).
+
+The model reproduces 1173 of 1174 measured paragraphs (the miss is an exact tie between
+equal-demerit solutions); first fit with the 5/6 limit, 68 of 80 narrow and 61 of 110 wide
+random paragraphs. Prince's en-US hyphenation points differ from pyphen's `en_US` for some
+words (follow-up F-F).
+
+`prince/linebreak.py` plans, then forces: get_next_linebox computes the breaks of the
+paragraph from Pango widths (measured at a large font size, so that Pango's rounding of
+advances does not add up) and caches them by line start, so that page breaks reuse the
+plan; split_text_box then ends each text box of the line at the planned break and
+text_align (F8) justifies it. Content the model does not cover keeps first fit for the
+paragraph: atomic inlines, floats and other out-of-flow boxes, `::first-line`,
+`::first-letter`, break opportunities other than spaces and hyphens (`/`, dashes, CJK),
+letter- or word-spacing, right-to-left text, a word wider than the line; so does a planned
+line whose actual end or width differs from the plan (a float beside the paragraph).
+Results on platen, 1215 paragraphs: 1207 as Prince (8 known exceptions: the tie, a soft
+hyphen directly before an explicit hyphen, 6 `hyphens: auto` paragraphs with Prince-only
+or pyphen-only points), first fit 624.
 
 ### F9. Hyphenation dictionaries and hyphen glyph
 
@@ -503,7 +544,7 @@ Layers:
 4. `src/Config/PlatenConfig.php`, `.env` — `PLATEN_PRINCE_COMPAT`; default
    `PLATEN_WEASYPRINT_BINARY=weasyprint-platen`.
 5. `docker/weasyprint/platen_weasyprint/quality/` — F2, F3a, F4a, F6, F7a, F8, F9a, F11.
-6. `docker/weasyprint/platen_weasyprint/prince/` — F3b, F4b, F7b, F9b, F10.
+6. `docker/weasyprint/platen_weasyprint/prince/` — F3b, F4b, F7b, F8b, F9b, F10.
 7. `docker/weasyprint/weasyprint-platen` — entry script.
 8. `docker/fontconfig/platen.conf` — F5.
 9. `Dockerfile` — install package, script and fontconfig file; optional Selawik/Gelasio.
@@ -578,14 +619,16 @@ compat vs DocRaptor test mode, all six scenarios:
 Quality layer, every request:
 - each fix has tests with spec vectors, plus a Chromium comparison where the behaviour is
   browser-defined (§4.4);
-- requests without a pipeline number show no Prince-layer behaviour (F1, F3b, F4b, F7b, F9b,
-  F10);
+- requests without a pipeline number show no Prince-layer behaviour (F1, F3b, F4b, F7b, F8b,
+  F9b, F10);
 - existing platen tests pass, or each changed expectation is listed in the release notes.
 
 ## 10. Open risks and gaps
 
 - `@left`/`@right` regions and mixing `@top` with `@top-*` boxes are not calibrated.
-- Prince's justification interplay with hyphenation is not isolated (F8).
+- Prince's line breaking of justified paragraphs (F8b) was measured on synthetic text with
+  spaces and hyphens only; other break opportunities, floats and atomic inlines keep first
+  fit.
 - pyphen's patterns for Prince's other languages may differ from Prince's own `.pat` files;
   only en-US was verified.
 - Spaces next to fallback-font runs: Prince sets some in the fallback font (wider). Whether

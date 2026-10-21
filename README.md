@@ -119,7 +119,9 @@ The Prince layer, measured against DocRaptor:
   descender, `sub`/`sup` are 83%, `smaller`/`larger` divide/multiply by 1.2;
 - hyphenation uses Prince's dictionaries (en-US for every language Prince lacks), with
   `-` as the hyphen;
-- list markers have no trailing space and sit 8pt from the content.
+- list markers have no trailing space and sit 8pt from the content;
+- justified paragraphs break where Prince breaks them (the whole paragraph is optimised,
+  not line by line), and no-break spaces keep their width.
 
 Requests without a pipeline number never get Prince-layer behaviour. Set
 `PLATEN_PRINCE_COMPAT=false` to turn the Prince layer off for everyone, or

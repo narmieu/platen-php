@@ -7,7 +7,10 @@ InDesign and TeX); WeasyPrint only ever stretched them.
   font, and the box keeps it. WeasyPrint passed ``justification_spacing`` on but measured
   without it; Layout.set_text now measures with a negative one. Breaking stays greedy
   (first fit), and hyphenation tries the next word in the space left by the compressed
-  line, that is compression comes before hyphenation.
+  line, that is compression comes before hyphenation. Prince does not break greedily: the
+  Prince layer (prince/linebreak.py) breaks justified paragraphs with Prince's optimiser
+  over the whole paragraph, through these wrappers, and keeps no-break spaces at their
+  width.
 - Alignment: a line with compressed boxes gets its natural spaces back, then a justified
   line is set to exactly the available width (``justify_line`` with negative extra space
   when it is too wide); a line aligned otherwise (the last line, unless
