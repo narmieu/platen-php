@@ -3,7 +3,7 @@
 Every length is in pt (1 CSS px = 0.75 pt). Positions are measured from the top-left
 corner of the page, y growing downwards, as in the CSS layout. Pages count from 0.
 
-Layout helpers (render, runs, lines, baselines, margin_boxes) read WeasyPrint's box tree;
+Layout helpers (render, runs, lines, baselines, margin_boxes, texts) read WeasyPrint's box tree;
 PDF helpers (pdf_fonts, page_group_cs, content) read the written PDF with pypdf.
 """
 
@@ -11,7 +11,7 @@ import io
 import os
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import weasyprint
@@ -78,7 +78,10 @@ class Run:
 
 @dataclass(frozen=True)
 class Box:
-    """The border box (x, y, width, height) and the content box's left edge and width."""
+    """The border box (x, y, width, height) and the content box's left edge and width.
+
+    ``source`` is the WeasyPrint box they were measured on, for texts().
+    """
 
     x: float
     y: float
@@ -86,6 +89,7 @@ class Box:
     height: float
     content_x: float
     content_width: float
+    source: boxes.Box | None = field(default=None, repr=False, compare=False)
 
 
 def runs(doc: weasyprint.Document, page: int = 0) -> list[Run]:
@@ -118,10 +122,21 @@ def margin_boxes(doc: weasyprint.Document, page: int = 0) -> dict[str, Box]:
             height=box.border_height() * PT_PER_PX,
             content_x=box.content_box_x() * PT_PER_PX,
             content_width=box.width * PT_PER_PX,
+            source=box,
         )
         for box in doc.pages[page]._page_box.children
         if isinstance(box, boxes.MarginBox)
     }
+
+
+def texts(box: Box) -> str:
+    """The text of the text boxes inside ``box`` (from margin_boxes()), in document order,
+    concatenated."""
+    return "".join(
+        child.text
+        for child in box.source.descendants(placeholders=True)
+        if isinstance(child, boxes.TextBox)
+    )
 
 
 def _boxes(doc, page):

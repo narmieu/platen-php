@@ -9,9 +9,9 @@ from types import ModuleType
 
 from .. import apply_modules
 
-from . import svg
+from . import prince_syntax, svg
 
-MODULES: list[ModuleType] = [svg]
+MODULES: list[ModuleType] = [svg, prince_syntax]
 
 _applied: set[ModuleType] = set()
 
