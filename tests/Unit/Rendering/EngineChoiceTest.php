@@ -16,10 +16,10 @@ final class EngineChoiceTest extends TestCase
 {
     #[Test]
     #[DataProvider('choices')]
-    public function itChoosesTheEngineAndPrinceCompatibility(?string $pipeline, bool $javascript, bool $flag, Engine $engine, bool $compat): void
+    public function itChoosesTheEngineAndPrinceCompatibility(?string $pipeline, bool $javascript, bool $flag, Engine $engine, bool $compat, string $content = '<p>x</p>', bool $byUrl = false): void
     {
         $request = DocumentRequest::fromRequest([
-            'document_content' => '<p>x</p>',
+            ...($byUrl ? ['document_url' => 'https://example.com/a.html'] : ['document_content' => $content]),
             'pipeline' => $pipeline,
             'javascript' => $javascript,
         ]);
@@ -31,7 +31,7 @@ final class EngineChoiceTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{0: string|null, 1: bool, 2: bool, 3: Engine, 4: bool}>
+     * @return iterable<string, array{0: string|null, 1: bool, 2: bool, 3: Engine, 4: bool, 5?: string, 6?: bool}>
      */
     public static function choices(): iterable
     {
@@ -45,6 +45,11 @@ final class EngineChoiceTest extends TestCase
         yield 'chromium by name' => ['chromium', false, true, Engine::Chromium, false];
         yield 'version with suffix' => ['10a', false, true, Engine::WeasyPrint, false];
         yield 'flag off' => ['10', false, false, Engine::WeasyPrint, false];
-        yield 'javascript goes to chromium' => ['10', true, true, Engine::Chromium, false];
+        yield 'javascript without scripts under a number' => ['10', true, true, Engine::WeasyPrint, true];
+        yield 'javascript with a script' => ['10', true, true, Engine::Chromium, false, '<script>x()</script>'];
+        yield 'javascript without pipeline' => [null, true, true, Engine::Chromium, false];
+        yield 'javascript with weasyprint by name' => ['weasyprint', true, true, Engine::Chromium, false];
+        yield 'javascript with flag off' => ['10', true, false, Engine::Chromium, false];
+        yield 'javascript from document_url' => ['10', true, true, Engine::Chromium, false, '', true];
     }
 }

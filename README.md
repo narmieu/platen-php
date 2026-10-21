@@ -74,6 +74,8 @@ Like DocRaptor, platen waits for `docraptorJavaScriptFinished()` to return `true
 page defines it, and console output stops rendering unless `ignore_console_messages` is
 set.
 
+With a DocRaptor pipeline number and Prince compatibility on, `javascript: true` documents without scripts render with WeasyPrint.
+
 ## Rendering quality and Prince compatibility
 
 platen runs WeasyPrint through `weasyprint-platen`, a wrapper (`docker/weasyprint`) that
