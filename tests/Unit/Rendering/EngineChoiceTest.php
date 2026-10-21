@@ -30,6 +30,25 @@ final class EngineChoiceTest extends TestCase
         self::assertSame($compat, $choice->princeCompat);
     }
 
+    #[Test]
+    public function itLooksForScriptsOnlyInJavaScriptRequests(): void
+    {
+        // 12 MB with a handler and long cells: neither of the detector's shortcuts applies,
+        // so looking would parse it, which shows in the peak memory.
+        $cell = str_repeat('lorem ipsum ', 30);
+        $html = '<table onclick="f()">'.str_repeat("<tr><td>{$cell}</td><td>{$cell}</td></tr>", 16_000).'</table>';
+        $request = DocumentRequest::fromRequest(['document_content' => $html, 'pipeline' => '10', 'javascript' => false]);
+
+        memory_reset_peak_usage();
+        $before = memory_get_usage();
+        $choice = EngineChoice::for($request, TestConfig::create());
+        $looking = memory_get_peak_usage() - $before;
+
+        self::assertSame(Engine::WeasyPrint, $choice->engine);
+        self::assertTrue($choice->princeCompat);
+        self::assertLessThan(1_000_000, $looking);
+    }
+
     /**
      * @return iterable<string, array{0: string|null, 1: bool, 2: bool, 3: Engine, 4: bool, 5?: string, 6?: bool}>
      */

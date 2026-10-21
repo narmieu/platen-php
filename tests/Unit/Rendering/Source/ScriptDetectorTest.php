@@ -49,4 +49,33 @@ final class ScriptDetectorTest extends TestCase
         self::assertTrue($handled);
         self::assertLessThan(2000, $elapsedMs);
     }
+
+    #[Test]
+    public function itDoesNotParseDocumentsWithoutAnythingLikeAHandler(): void
+    {
+        $table = '<table>'.str_repeat('<tr><td>cell</td></tr>', 20_000).'</table>';
+
+        memory_reset_peak_usage();
+        $before = memory_get_usage();
+        $needsBrowser = ScriptDetector::needsBrowser($table);
+        $parsing = memory_get_peak_usage() - $before;
+
+        self::assertFalse($needsBrowser);
+        self::assertLessThan(1_000_000, $parsing);
+    }
+
+    #[Test]
+    public function itSendsDocumentsWithTooManyTagsToParseToTheBrowser(): void
+    {
+        // Something like a handler (in the text here), and more than 100,000 tags.
+        $html = str_repeat('<p>x</p>', 50_000).'<p>onboarding = fun</p>';
+
+        memory_reset_peak_usage();
+        $before = memory_get_usage();
+        $needsBrowser = ScriptDetector::needsBrowser($html);
+        $parsing = memory_get_peak_usage() - $before;
+
+        self::assertTrue($needsBrowser);
+        self::assertLessThan(1_000_000, $parsing);
+    }
 }

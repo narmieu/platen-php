@@ -25,7 +25,9 @@ final readonly class EngineChoice
         $hasPipelineNumber = 1 === preg_match('/^\d+(\.\d+)*$/', trim((string) $request->pipeline));
         // Only a browser runs JavaScript. A DocRaptor client always sends javascript: true, so under a
         // pipeline number a document without scripts or handlers keeps WeasyPrint (and the Prince layer).
-        $scriptFree = $hasPipelineNumber
+        // Without JavaScript there is nothing to look for, and looking costs memory on large documents.
+        $scriptFree = $request->runsJavaScript()
+            && $hasPipelineNumber
             && $config->princeCompat
             && null !== $request->documentContent
             && !ScriptDetector::needsBrowser($request->documentContent);
