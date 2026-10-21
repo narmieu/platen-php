@@ -91,22 +91,25 @@ Where both layers define the same behaviour (F4, F9) the Prince layer wins when 
   changelog and README.
 - Kill switch: env `PLATEN_PRINCE_COMPAT` (default `true`). When `false`, every request gets
   the quality layer only.
-- The WeasyPrint binary becomes platen's wrapper (§4.2) for every render; it receives
-  `--platen-prince` when `$job->princeCompat`. All existing CLI arguments stay the same.
+- The WeasyPrint binary becomes platen's wrapper (§4.2) for every render; its environment
+  has `PLATEN_WEASYPRINT_PRINCE=1` when `$job->princeCompat` (a variable, not an argument:
+  stock WeasyPrint ignores the variable but rejects unknown arguments). All existing CLI
+  arguments stay the same.
 
 4.2 Patch packages (Python)
 - New Python package in the repo, e.g. `docker/weasyprint/platen_weasyprint/` with two
   subpackages, `quality` and `prince`, installed into `/opt/weasyprint` by the Dockerfile,
-  plus an entry script `weasyprint-platen` that strips `--platen-prince` from `argv`, applies
-  `quality` (always) and `prince` (when the flag was given), then runs
-  `weasyprint.__main__.main()`. `PLATEN_WEASYPRINT_BINARY` defaults to it.
+  plus an entry script `weasyprint-platen` that applies `quality` (always) and `prince` (when
+  the environment sets `PLATEN_WEASYPRINT_PRINCE=1`, or for manual runs when `argv` has
+  `--platen-prince`, which it strips), then runs `weasyprint.__main__.main()`. `PLATEN_WEASYPRINT_BINARY` defaults to it.
 - `apply()` asserts `weasyprint.__version__ == "70.0"` (and the pydyf/pyphen versions it
   relies on) and raises otherwise. Each fix is one module with an `apply()`; each
   monkeypatches the functions named in §5. Patches are process-global, which is fine: platen
   runs one WeasyPrint process per document.
 - F5 is data: one fontconfig file for every render (quality), copied into the image.
-- Escape hatch for operators: `PLATEN_WEASYPRINT_BINARY=weasyprint` restores stock
-  WeasyPrint (no layers at all).
+- Escape hatch for operators: `PLATEN_WEASYPRINT_BINARY=weasyprint` runs WeasyPrint with
+  neither patch layer (platen's fontconfig file, F5, stays in the image); requests with a
+  pipeline number render there too.
 
 4.3 Order of work (suggested)
 Quality layer first (it benefits every user and the Prince layer builds on it):
@@ -495,7 +498,8 @@ Layers:
 
 1. `src/Rendering/Renderer.php` — F1 routing; compute `princeCompat` (§4.1).
 2. `src/Rendering/RenderJob.php` — `princeCompat` flag.
-3. `src/Rendering/WeasyPrint/WeasyPrintEngine.php` — pass `--platen-prince` when compat.
+3. `src/Rendering/WeasyPrint/WeasyPrintEngine.php` — set `PLATEN_WEASYPRINT_PRINCE=1` in the
+   environment when compat.
 4. `src/Config/PlatenConfig.php`, `.env` — `PLATEN_PRINCE_COMPAT`; default
    `PLATEN_WEASYPRINT_BINARY=weasyprint-platen`.
 5. `docker/weasyprint/platen_weasyprint/quality/` — F2, F3a, F4a, F6, F7a, F8, F9a, F11.

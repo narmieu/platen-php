@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\EndToEnd;
 
 use App\Tests\Support\PdfFile;
+use App\Tests\Support\PlatenServer;
 
 final class PrinceCompatTest extends EndToEndTestCase
 {
@@ -27,6 +28,23 @@ final class PrinceCompatTest extends EndToEndTestCase
 
         self::assertSame(200, $response->getStatusCode(), $response->getContent(false));
         self::assertSame('chromium', $response->getHeaders()['x-platen-engine'][0]);
+    }
+
+    public function testStockWeasyPrintRendersPipelineNumbers(): void
+    {
+        // The escape hatch PLATEN_WEASYPRINT_BINARY=weasyprint: stock WeasyPrint has neither
+        // layer and must not be given arguments it does not know.
+        self::stopPlaten();
+        $server = PlatenServer::start(['WEASYPRINT_BINARY' => 'weasyprint']);
+        try {
+            $response = self::render(['pipeline' => '10', 'javascript' => true, 'document_content' => '<p>stock</p>'], $server->client());
+
+            self::assertSame(200, $response->getStatusCode(), $response->getContent(false));
+            self::assertSame('weasyprint', $response->getHeaders()['x-platen-engine'][0]);
+            self::assertStringContainsString('stock', PdfFile::fromBytes($response->getContent())->text());
+        } finally {
+            $server->stop();
+        }
     }
 
     public function testPrincePipelineWritesAnRgbPageGroupOnTransparentPages(): void

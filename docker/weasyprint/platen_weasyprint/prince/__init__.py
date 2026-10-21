@@ -1,5 +1,6 @@
 """Prince layer: fixes that make WeasyPrint render like Prince 15.1, for DocRaptor pipeline
-numbers. Applied on top of the quality layer (``weasyprint-platen --platen-prince``).
+numbers. Applied on top of the quality layer (``PLATEN_WEASYPRINT_PRINCE=1`` in the
+environment, or ``weasyprint-platen --platen-prince``).
 
 Each fix is a module with an ``apply() -> None`` function; MODULES lists them in the order
 they are applied.

@@ -34,7 +34,7 @@ default):
 ## Turning it off
 
 - `PLATEN_PRINCE_COMPAT=false` turns the Prince layer off for every request (the quality layer stays).
-- `PLATEN_WEASYPRINT_BINARY=weasyprint` runs stock WeasyPrint, without either layer. The Docker image sets `weasyprint-platen`; elsewhere the default stays `weasyprint`.
+- `PLATEN_WEASYPRINT_BINARY=weasyprint` runs WeasyPrint with neither patch layer; platen's font configuration (`45-platen.conf`) stays in the Docker image. Requests with a pipeline number render there too, without Prince-layer behaviour: platen asks for the Prince layer with the environment variable `PLATEN_WEASYPRINT_PRINCE=1`, which plain WeasyPrint ignores. The Docker image sets `weasyprint-platen`; elsewhere the default stays `weasyprint`.
 
 ## Requirements
 

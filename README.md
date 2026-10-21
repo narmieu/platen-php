@@ -123,7 +123,10 @@ The Prince layer, measured against DocRaptor:
 
 Requests without a pipeline number never get Prince-layer behaviour. Set
 `PLATEN_PRINCE_COMPAT=false` to turn the Prince layer off for everyone, or
-`PLATEN_WEASYPRINT_BINARY=weasyprint` to run stock WeasyPrint with neither layer.
+`PLATEN_WEASYPRINT_BINARY=weasyprint` to run WeasyPrint with neither patch layer (platen's
+font configuration, `docker/fontconfig/45-platen.conf`, stays in the image). platen asks
+for the Prince layer with the environment variable `PLATEN_WEASYPRINT_PRINCE=1`, which
+plain `weasyprint` ignores, so requests with a pipeline number render with it too.
 `weasyprint-platen` only runs with WeasyPrint 70.0, pydyf 0.13.0 and pyphen 0.18.1, the
 versions in the Docker image. `tools/prince-calibration` holds the scripts that measured
 Prince (free fonts only, DocRaptor's free test mode).
@@ -220,7 +223,7 @@ All settings are environment variables; `.env` holds the defaults.
 | `PLATEN_MAX_REQUEST_MB` | `100` | Largest accepted request body |
 | `PLATEN_EGRESS_LISTEN` | `127.0.0.1:3128` (`0.0.0.0:3128` in Docker) | Where the egress proxy listens |
 | `PLATEN_EGRESS_PROXY` | `http://127.0.0.1:3128` | How WeasyPrint and callbacks reach the egress proxy |
-| `PLATEN_WEASYPRINT_BINARY` | `weasyprint-platen` in the Docker image, `weasyprint` otherwise | The WeasyPrint command platen runs. `weasyprint` runs stock WeasyPrint, without either layer |
+| `PLATEN_WEASYPRINT_BINARY` | `weasyprint-platen` in the Docker image, `weasyprint` otherwise | The WeasyPrint command platen runs. `weasyprint` runs WeasyPrint with neither patch layer; platen's font configuration stays |
 | `PLATEN_QPDF_BINARY` | `qpdf` | The qpdf command platen runs |
 | `PLATEN_PRINCE_COMPAT` | `true` | Apply the Prince compatibility layer to requests that send a pipeline number |
 | `PLATEN_PHP_MEMORY_LIMIT` | `512M` | PHP's memory limit in the Docker image |

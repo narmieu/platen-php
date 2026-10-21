@@ -4,7 +4,7 @@ Two layers of fixes, each a subpackage with one module per fix:
 
 - ``quality``: closer to the CSS specifications and to browsers, for every render;
 - ``prince``: like Prince 15.1, for DocRaptor pipeline numbers, on top of ``quality``
-  (``weasyprint-platen --platen-prince``).
+  (``PLATEN_WEASYPRINT_PRINCE=1`` in the environment, or ``--platen-prince``).
 
 The patches reach into the internals of WeasyPrint and of the libraries it uses, so they
 only run against the exact versions in ``SUPPORTED``.

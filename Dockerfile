@@ -38,7 +38,7 @@ RUN set -eux; \
 COPY docker/fontconfig/45-platen.conf /etc/fonts/conf.d/45-platen.conf
 
 # weasyprint-platen: WeasyPrint with platen's quality fixes, plus the Prince compatibility
-# fixes when given --platen-prince.
+# fixes when the environment sets PLATEN_WEASYPRINT_PRINCE=1 (or given --platen-prince).
 COPY docker/weasyprint /opt/platen-weasyprint
 RUN set -eux; \
     /opt/weasyprint/bin/pip install --no-cache-dir /opt/platen-weasyprint; \

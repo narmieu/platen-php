@@ -31,6 +31,7 @@ def test_flag_is_stripped_and_prince_applied(monkeypatch, tmp_path):
 
 
 def test_without_flag_only_quality_applies(monkeypatch, tmp_path):
+    monkeypatch.delenv("PLATEN_WEASYPRINT_PRINCE", raising=False)
     calls = []
     monkeypatch.setattr(platen_weasyprint.quality, "apply", lambda: calls.append("quality"))
     monkeypatch.setattr(platen_weasyprint.prince, "apply", lambda: calls.append("prince"))
@@ -39,6 +40,21 @@ def test_without_flag_only_quality_applies(monkeypatch, tmp_path):
     out = tmp_path / "out.pdf"
     cli.main([str(src), str(out)])
     assert calls == ["quality"] and out.read_bytes().startswith(b"%PDF")
+
+
+@pytest.mark.parametrize("value, layers", [("1", ["quality", "prince"]), ("0", ["quality"]), ("", ["quality"])])
+def test_environment_variable_asks_for_prince(monkeypatch, tmp_path, value, layers):
+    # How platen asks for the Prince layer: stock WeasyPrint ignores the variable, while it
+    # rejects --platen-prince.
+    monkeypatch.setenv("PLATEN_WEASYPRINT_PRINCE", value)
+    calls = []
+    monkeypatch.setattr(platen_weasyprint.quality, "apply", lambda: calls.append("quality"))
+    monkeypatch.setattr(platen_weasyprint.prince, "apply", lambda: calls.append("prince"))
+    src = tmp_path / "in.html"
+    src.write_text("<p>x</p>")
+    out = tmp_path / "out.pdf"
+    cli.main([str(src), str(out)])
+    assert calls == layers and out.read_bytes().startswith(b"%PDF")
 
 
 def fix_module(name, calls):

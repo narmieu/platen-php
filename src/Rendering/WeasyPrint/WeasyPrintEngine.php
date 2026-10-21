@@ -93,9 +93,6 @@ final readonly class WeasyPrintEngine
         if ($options->pdfForms) {
             $arguments[] = '--pdf-forms';
         }
-        if ($job->princeCompat) {
-            $arguments[] = '--platen-prince';
-        }
         if ($options->noCompress) {
             $arguments[] = '--uncompressed-pdf';
         }
@@ -110,9 +107,13 @@ final readonly class WeasyPrintEngine
      * Every fetch goes through the egress proxy, which enforces the network policy and
      * adds the headers WeasyPrint's command line cannot send.
      *
+     * The Prince layer is asked for with PLATEN_WEASYPRINT_PRINCE=1 rather than an argument:
+     * stock WeasyPrint (PLATEN_WEASYPRINT_BINARY=weasyprint) ignores the variable, but would
+     * reject an argument it does not know.
+     *
      * @return array<string, string|false>
      */
-    private function environment(RenderJob $job): array
+    public function environment(RenderJob $job): array
     {
         $ticket = new ProxyTicket(
             userAgentSuffix: $job->userAgentToken,
@@ -141,6 +142,7 @@ final readonly class WeasyPrintEngine
             'all_proxy' => false,
             'ALL_PROXY' => false,
             'PYTHONWARNINGS' => 'ignore',
+            'PLATEN_WEASYPRINT_PRINCE' => $job->princeCompat ? '1' : false,
         ];
     }
 
