@@ -8,9 +8,9 @@ they are applied.
 from types import ModuleType
 
 from .. import apply_modules
-from . import colors
+from . import colors, font_matching
 
-MODULES: list[ModuleType] = [colors]
+MODULES: list[ModuleType] = [colors, font_matching]
 
 _applied: set[ModuleType] = set()
 
