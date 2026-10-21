@@ -109,10 +109,36 @@ def _resolve_style_attribute(value, style):
     return "; ".join(kept)
 
 
+def _resolve_stylesheet(text, style):
+    """Resolve var() in a <style> text, per declaration: one without a value is dropped."""
+    if "var(" not in text:
+        return text
+    rules = tinycss2.parse_stylesheet(text, skip_comments=True, skip_whitespace=True)
+    for rule in rules:
+        if rule.type == "qualified-rule":
+            content = tinycss2.parse_blocks_contents(
+                rule.content, skip_comments=True, skip_whitespace=True
+            )
+            kept = []
+            for declaration in content:
+                if declaration.type != "declaration":
+                    kept.append(declaration)
+                    continue
+                try:
+                    declaration.value = _resolve(declaration.value, style)
+                except _Unresolved:
+                    continue
+                kept.append(declaration)
+            rule.content = kept
+    return tinycss2.serialize(rules)
+
+
 def _resolve_tree(root, style):
     for element in root.iter():
         if not isinstance(element.tag, str):
             continue
+        if element.tag == "{http://www.w3.org/2000/svg}style" and element.text:
+            element.text = _resolve_stylesheet(element.text, style)
         for name, value in list(element.attrib.items()):
             if "var(" not in value:
                 continue
@@ -127,20 +153,11 @@ def _resolve_tree(root, style):
 
 
 def _inherit_fonts(root, style):
-    declared = set()
-    for name in _FONT_PROPERTIES:
-        if root.get(name) is not None:
-            declared.add(name)
-    for declaration in tinycss2.parse_blocks_contents(
-        root.get("style", ""), skip_comments=True, skip_whitespace=True
-    ):
-        if declaration.type == "declaration":
-            declared.add(declaration.lower_name)
-    missing = {n: v for n, v in _font_values(style).items() if n not in declared}
-    if missing:
-        existing = root.get("style", "").strip().rstrip(";")
-        added = "; ".join(f"{n}: {v}" for n, v in missing.items())
-        root.set("style", f"{existing}; {added}" if existing else added)
+    """Set the font properties the root lacks as presentation attributes: WeasyPrint's SVG
+    cascade lets the SVG's own <style> rules and style attributes override them."""
+    for name, value in _font_values(style).items():
+        if root.get(name) is None:
+            root.set(name, value)
 
 
 def apply() -> None:

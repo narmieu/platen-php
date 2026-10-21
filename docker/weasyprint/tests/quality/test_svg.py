@@ -29,3 +29,14 @@ def test_explicit_svg_font_family_wins():
 def test_svg_style_element_still_applies():
     data = pdf('<svg width="20" height="20"><style>rect{fill:#00ff00}</style><rect width="20" height="20"/></svg>')
     assert has_rgb_fill(content(data), (0, 1, 0))
+
+
+def test_svg_style_rule_font_family_wins_over_inherited():
+    data = pdf('<div style="font-family: \'Liberation Sans\'"><svg width="40" height="20"><style>svg{font-family:"DejaVu Sans"}</style><text y="15">12</text></svg></div>')
+    assert "DejaVuSans" in pdf_fonts(data) and "LiberationSans" not in pdf_fonts(data)
+
+
+def test_var_in_svg_style_element_resolves_per_declaration():
+    data = pdf('<style>:root{--c:#00ff00}</style><svg width="40" height="20"><style>rect{fill:var(--c)} circle{fill:#ff0000; stroke:var(--missing)}</style><rect width="20" height="20"/><circle cx="30" cy="10" r="5"/></svg>')
+    stream = content(data)
+    assert has_rgb_fill(stream, (0, 1, 0)) and has_rgb_fill(stream, (1, 0, 0))
