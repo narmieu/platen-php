@@ -74,21 +74,58 @@ Like DocRaptor, platen waits for `docraptorJavaScriptFinished()` to return `true
 page defines it, and console output stops rendering unless `ignore_console_messages` is
 set.
 
-With a DocRaptor pipeline number and Prince compatibility on, `javascript: true` documents without scripts render with WeasyPrint.
+With a DocRaptor pipeline number and Prince compatibility on, `javascript: true` documents
+without scripts render with WeasyPrint: DocRaptor's clients always send `javascript: true`,
+and only a browser runs scripts. A `document_content` with no `<script>`, `<template>` or
+`on…` event-handler attribute counts as script-free; `document_url` documents keep
+Chromium.
 
 ## Rendering quality and Prince compatibility
 
 platen runs WeasyPrint through `weasyprint-platen`, a wrapper (`docker/weasyprint`) that
-adds two layers. The layers are being added; the flag plumbing is in place.
+patches WeasyPrint 70.0 in-process with two layers.
 
 | Layer | Applies to | Contains |
 | --- | --- | --- |
 | Quality | every WeasyPrint render | fixes to WeasyPrint's output that are right whatever the document was written for |
-| Prince | only when `pipeline` is a number such as `"10"` or `"10.1"` and `PLATEN_PRINCE_COMPAT` is `true` | behaviour that makes WeasyPrint lay out like Prince |
+| Prince | only when `pipeline` is a number such as `"10"` or `"10.1"` and `PLATEN_PRINCE_COMPAT` is `true` | behaviour that makes WeasyPrint lay out like Prince 15.1, DocRaptor's engine |
+
+The quality layer, like browsers and the CSS specifications:
+
+- inline SVG inherits the page font and resolves `var()`;
+- Prince's `flow: static()` / `content: flow()` running elements and its full-width `@top`
+  / `@bottom` page regions work;
+- pages that use transparency and ask for `-prince-pdf-page-colorspace: cmyk` get a CMYK
+  transparency group;
+- with no matching family the default font is serif; `serif`, `sans-serif` and `monospace`
+  are Liberation Serif, Sans and Mono (metric twins of Times New Roman, Arial, Courier New);
+- `line-height: normal` includes the font's line gap, and fallback glyphs do not make lines
+  taller;
+- `sup` and `sub` inherit the line-height and grow the line as CSS 2.1 says;
+- hyphenation follows the language and the script, and the hyphen is U+2010 only in fonts
+  that have it;
+- `@font-face` weights match by CSS Fonts Level 4, with weight ranges and `unicode-range`
+  subsets;
+- justified text may shrink word spaces to 5/6 of their width before wrapping.
+
+The Prince layer, measured against DocRaptor:
+
+- script-free `javascript: true` documents stay on WeasyPrint (see above);
+- pages that use transparency get an RGB transparency group, and grey colours are written
+  as DeviceGray;
+- `@font-face` weights match by CSS Fonts Level 3;
+- superscripts and subscripts are raised and lowered by the parent font's ascender and
+  descender, `sub`/`sup` are 83%, `smaller`/`larger` divide/multiply by 1.2;
+- hyphenation uses Prince's dictionaries (en-US for every language Prince lacks), with
+  `-` as the hyphen;
+- list markers have no trailing space and sit 8pt from the content.
 
 Requests without a pipeline number never get Prince-layer behaviour. Set
 `PLATEN_PRINCE_COMPAT=false` to turn the Prince layer off for everyone, or
 `PLATEN_WEASYPRINT_BINARY=weasyprint` to run stock WeasyPrint with neither layer.
+`weasyprint-platen` only runs with WeasyPrint 70.0, pydyf 0.13.0 and pyphen 0.18.1, the
+versions in the Docker image. `tools/prince-calibration` holds the scripts that measured
+Prince (free fonts only, DocRaptor's free test mode).
 
 ## Compatibility
 
@@ -143,7 +180,9 @@ XML with DocRaptor's status codes (400, 401, 403, 422). PDFs carry the
 ### Rendering differences
 
 - Prince-only CSS and JavaScript (`prince-*` properties, `prince-script()`, Prince's
-  JavaScript APIs) are not supported. Standard paged-media CSS is.
+  JavaScript APIs) are not supported, except `flow: static()` (also `-prince-flow`),
+  `content: flow()`, the `@top` / `@bottom` page regions and
+  `-prince-pdf-page-colorspace`. Standard paged-media CSS is.
 - Without an `@page` size, pages are US Letter with 54pt margins, Prince's defaults.
 - Web fonts load from any server, as with Prince. Because Gotenberg loads each page from
   a file, Chromium would only load fonts whose server sends
@@ -284,9 +323,22 @@ composer test:e2e
 
 They use `172.17.0.1` (Docker's bridge address on Linux) as a blocked internal address;
 set `PLATEN_TEST_BLOCKED_HOST` to another non-loopback address of the machine if yours
-differs. `tests/Docker/smoke-test.sh` checks the Docker image and `compose.yaml`; CI
-runs all of these on every push and publishes the image to GitHub's registry when a
-`v*` tag is pushed.
+differs.
+
+The WeasyPrint wrapper has its own tests. Each layer patches WeasyPrint for the whole
+process, so each layer's tests run in their own pytest process; the oracle tests compare
+quality-layer behaviour with Gotenberg's Chromium:
+
+```sh
+pip install './docker/weasyprint[test]'
+pytest docker/weasyprint/tests/test_cli.py docker/weasyprint/tests/quality
+pytest docker/weasyprint/tests/prince
+GOTENBERG_URL=http://127.0.0.1:3000 pytest docker/weasyprint/tests/oracle
+```
+
+`tests/Docker/smoke-test.sh` checks the Docker image and `compose.yaml`; CI runs all of
+these on every push and publishes the image to GitHub's registry when a `v*` tag is
+pushed.
 
 ## License
 

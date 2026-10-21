@@ -162,9 +162,10 @@ Prince input used by the templates:
     `@top` border box spans x 30.0–180.0mm, y 0.0–20.0mm; `@bottom` x 30.0–180.0mm,
     y 277.0–297.0mm. That is: horizontally from the left margin edge across the whole page
     border width (`page.border_width()`, already computed at `layout/page.py:413`), vertically
-    the whole margin. Content is centred like `@top-center` by default. The region's own
-    padding is inside that span (the templates rely on this: `padding-left: 15mm;
-    padding-right: 18mm` inside a 210mm region with 0 side margins).
+    the whole margin. Content is centred like `@top-center` by default. Free fonts
+    (re-measured 2026-10-21, `layout`): the same rectangles, in Prince and platen. The
+    region's own padding is inside that span (the templates rely on this: `padding-left:
+    15mm; padding-right: 18mm` inside a 210mm region with 0 side margins).
   - Implement as a box that takes the full span instead of the three-box distribution of
     `compute_variable_dimension`. If both `@top` and `@top-left/center/right` exist on a page,
     pick a rule and document it (not observed in the fixtures).
@@ -185,6 +186,11 @@ Measured Prince output (same document, two named pages):
   `rg` unchanged. Content is **not** converted to CMYK.
 - On screen, the CMYK group dulls colours: CSS `#053384` shows as `#253a7f`, `#b7cef9` as
   `#bbcdea`, black text (`0 g`) as `#231f20`.
+- Free fonts (re-measured 2026-10-21, `layout`): of 8 pages only the two with transparency
+  (`rgba(0,0,0,0.5)`) have a `/Group`: `/DeviceCMYK` on the `cmyk` page, `/DeviceRGB` on the
+  other; the six opaque pages have none (the "every page" above was measured on pages that
+  all had transparency). Neutrals `0 g`, `0.5020 g`, `1.0000 g`, others `rg`. platen with the
+  Prince layer writes the same groups and operators (with more decimals: `0.501961 g`).
 
 WeasyPrint 70.0: no page group; every colour `r g b rg`.
 
@@ -229,6 +235,11 @@ request 500 → Prince 700, WeasyPrint 200 (IdentyFi `.dimension-value`).
   - normal {200,300,500,700}: 100→200, 400→500, 600→700, 800→700, 900→700.
   - normal {200,400,500,700}: 100→200, 300→200, 600→700, 800→700, 900→700.
   - italic {200,700}: 100,300,400→200; 500,600,800,900→700.
+- Free fonts (re-measured 2026-10-21, `tools/prince-calibration` `weights_a`/`b`/`c`: each
+  weight a different DejaVu / Liberation file renamed to one family): Prince picks the same
+  face in all 54 cases above. A family without italic faces sets italic text in the
+  normal faces with the same choices (`weights_b`, `weights_c`). platen with the Prince
+  layer picks the same face in all 54 cases.
 
 ### F5. Generic families, default font, glyph fallback (fontconfig) (quality layer)
 
@@ -247,6 +258,14 @@ Measured on DocRaptor vs platen today:
 | `system-ui` | Times New Roman | Noto Sans |
 | `Arial` / `Times New Roman` / `Courier New` | themselves | Liberation Sans / Serif / Mono |
 | `'Segoe UI'`, `Georgia`, `Verdana` | themselves | Noto Sans / Noto Serif / Noto Sans |
+
+Free fonts (re-measured 2026-10-21, `families`): every row above repeats (`Helvetica` comes
+out as an embedded `Helvetica-Bold`, `Times` and `Courier` as `Times-Roman` and `Courier`).
+č ć š đ ž in `platen-test.woff` (printable ASCII only) fall back to Times New Roman with no
+generic or with `serif`, Arial with `sans-serif`, Courier New with `monospace`, Segoe UI
+with the system stack (`-apple-system, …, 'Segoe UI', Roboto, sans-serif`). platen with
+the quality layer: Liberation Serif / Sans / Mono in the same places, Liberation Sans for
+the system stack.
 
 - Fontconfig file for every WeasyPrint render (§4.2):
   - `serif` → Liberation Serif, `sans-serif` → Liberation Sans, `monospace` → Liberation Mono
@@ -272,8 +291,13 @@ Measured:
 | DejaVu Sans (hhea 1901/−483/0, upm 2048, no USE_TYPO_METRICS) | 1.1641em | 1.1640em |
 | Liberation Sans (hhea 1854/−434/67, typo 1491/−431/307, no USE_TYPO_METRICS) | 1.1499em | 1.1172em |
 | FF Real Head Pro (hhea 1036/−353/0, typo 800/−200/389, USE_TYPO_METRICS) | 1.389em | 1.000em |
+| DejaVu Sans with USE_TYPO_METRICS (typo 1556/−492/410, OS/2 version 4; free-font stand-in for FF Real Head Pro) | 1.2002em | 1.000em |
 
-Rule (fits all three): pick ascender A, descender D and line gap G from OS/2 typo when
+Free fonts (re-measured 2026-10-21, `sup2`, fonts embedded as `@font-face`): DejaVu Sans
+1.1641em and Liberation Sans 1.1499em again; platen with the quality layer gives the same
+three values.
+
+Rule (fits all four): pick ascender A, descender D and line gap G from OS/2 typo when
 `USE_TYPO_METRICS` is set, otherwise from hhea; `normal = A + D + G`. WeasyPrint/Pango drops G.
 
 Prince also builds inline boxes per CSS 2.1 §10.8.1 with content area A + D (same table) and
@@ -305,7 +329,9 @@ Measured rules:
 - Raise for `super` = 0.5 × A × parent font size; drop for `sub` = 0.5 × D × parent font size
   (A, D as in F6, of the **parent's** font). Independent of the sup's own size and of
   line-height. Vectors: FF Real Head Pro P=10/20/30 → raise 4.0/8.0/12.0, drop 1.0/2.0/3.0;
-  Liberation Sans P=20 → raise 9.053; DejaVu Sans P=20 → raise 9.282.
+  Liberation Sans P=20 → raise 9.053; DejaVu Sans P=20 → raise 9.282. Free fonts
+  (re-measured 2026-10-21, `sup2`): Liberation Sans P=10/20/30 → raise 4.526/9.053/13.579,
+  drop 1.060/2.119/3.179, for every sup/sub size and line-height.
 - Line box growth follows CSS 2.1 with F6's content area. For inline box of font size f,
   line-height L: top = baseline − (L + (a − d)·f)/2, bottom = baseline + (L − (a − d)·f)/2,
   with a = A/upm, d = D/upm, baseline shifted by the raise/drop. The line box is the
@@ -341,6 +367,29 @@ both).
 Subscript growth below, FF Real Head Pro: fixed L: 0.1P + 0.3(P − s) (P=10: 1.51 / 2.02 / 2.50
 for s = 8.3 / 6.6 / 5.0); L = n × f: 0.1P − (P − s)(n − 0.6)/2, floored at 0.
 
+Free fonts (re-measured 2026-10-21, `sup2`): growth above the line for `<sup>`, Liberation
+Sans (a = 0.9053, d = 0.2119), same layout as the table above:
+
+| P | s | fixed L (any) | L = 1.2 | L = 1.5 | normal |
+|---|---|---|---|---|---|
+| 10 | 8.3 | 3.94 | 2.92 | 2.66 | 2.96 |
+| 10 | 6.6 | 3.35 | 1.31 | 0.80 | 1.39 |
+| 10 | 5.0 | 2.79 | 0 | — | 0 |
+| 20 | 16.6 | 7.87 | 5.83 | 5.32 | 5.92 |
+| 20 | 13.2 | 6.70 | 2.62 | 1.60 | 2.79 |
+| 20 | 10.0 | 5.59 | 0 | 0 | 0 |
+| 30 | 24.9 | 11.81 | 8.75 | 7.99 | 8.88 |
+| 30 | 19.8 | 10.04 | 3.92 | 2.39 | 4.18 |
+| 30 | 15.0 | 8.38 | 0 | 0 | 0 |
+
+`—` page break in the calibration document. Every value fits the formula: fixed L:
+raise − (a − d)(P − s)/2; L = n × f: raise − (n + a − d)(P − s)/2, floored at 0, `normal`
+as n = A + D + G (1.1499). Subscript growth below, Liberation Sans: fixed L: 0.5dP + (a −
+d)(P − s)/2 (P=10: 1.65 / 2.24 / 2.79 for s = 8.3 / 6.6 / 5.0); L = n × f: 0.5dP − (P −
+s)(n − (a − d))/2, floored at 0. Sizes: `sup`/`sub` 8.3 / 16.6 / 24.9 for P = 10 / 20 / 30;
+`smaller` 8.333 / 16.667 and `larger` 12 / 24 for P = 10 / 20. platen with the Prince layer
+gives every value above (±0.01pt).
+
 - Patch points: `css/computed_values.py:720 vertical_align` (needs the parent style's font
   metrics; it can return a length), `:579` font-size keywords, the UA rules at
   `css/html5_ua.css:89-90` (compat: `sub, sup { font-size: 83% }`, no `line-height` rule), and
@@ -356,7 +405,9 @@ move it to the Prince layer; nothing else depends on the choice.
 Measured with ten 22pt words in boxes narrowed in 0.05pt steps:
 - Prince lets word spaces shrink to **5/6 of their natural width** (threshold between
   0.8316 and 0.8341 at 10pt, between 0.8268 and 0.8365 at 20pt), then breaks greedily
-  (first fit).
+  (first fit). Free fonts (re-measured 2026-10-21, `justify`, ten 22.25pt words in
+  Liberation Sans): between 0.8320 and 0.8340 at 10pt, between 0.8320 and 0.8400 at 20pt
+  (0.1pt steps); platen the same.
 - Non-last lines are then justified to the full width (stretched or compressed).
 - A last line that fits only when compressed stays on one line, compressed exactly to fit
   (gaps 2.254…1.976pt in the vector); otherwise it keeps natural spacing.
@@ -403,6 +454,9 @@ Layers:
   without U+2010, Arial, DejaVu Sans). WeasyPrint's default is U+2010
   (`css/properties.py:165`); set it to `-`. In the IdentyFi kit U+2010 does not exist and
   falls back to another font, changing glyph and line height.
+- Free fonts (re-measured 2026-10-21, `layout`, `lang="en"`): U+002D in Liberation Sans
+  (has U+2010), Arial, DejaVu Sans and `platen-test.woff` (no U+2010); platen with the
+  Prince layer breaks every line at the same place with the same hyphen.
 - Tests: break positions for an en-US word list under `lang` = `sr`, `en`, `hr`, `de`;
   hyphen code point.
 
@@ -412,6 +466,8 @@ Layers:
   content is a **fixed 8pt** at every font size (tested 8, 12, 16pt). Outside markers: the
   marker's right edge is 8pt left of the content box. Inside markers: marker at the content
   edge, then 8pt, then the text.
+- Free fonts (re-measured 2026-10-21, `layout`, Liberation Sans): 8.00pt for `disc` outside
+  and inside, 8.01–8.02pt for `decimal` at 8, 12, 16pt; platen with the Prince layer 8.00pt.
 - WeasyPrint: marker string with a trailing space, gap ≈ 0.21em (1.70 / 2.54 / 3.39pt).
 - Patch points: `formatting_structure/build.py:325 marker_to_box` (marker text) and the
   outside-marker placement at `layout/block.py:749` (and `layout/absolute.py:70`).
