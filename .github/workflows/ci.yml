@@ -80,6 +80,13 @@ jobs:
             gotenberg --api-timeout=620s --chromium-proxy-server=http://127.0.0.1:3128 \
             --chromium-restart-after=0
           timeout 60 bash -c 'until curl -fs http://127.0.0.1:3000/health > /dev/null; do sleep 1; done'
+      # The quality layer against Chromium (Gotenberg), in a venv of its own: the layer patches
+      # WeasyPrint for the whole process.
+      - name: Browser oracle tests
+        run: |
+          python3 -m venv /tmp/oracle-venv
+          /tmp/oracle-venv/bin/pip install './docker/weasyprint[test]'
+          GOTENBERG_URL=http://127.0.0.1:3000 /tmp/oracle-venv/bin/pytest docker/weasyprint/tests/oracle
       - run: composer test:e2e
         env:
           PLATEN_WEASYPRINT_BINARY: weasyprint-platen
