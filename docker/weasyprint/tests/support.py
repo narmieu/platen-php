@@ -53,6 +53,21 @@ def font_url(file: str) -> str:
     raise FileNotFoundError(f"{file} is in none of {', '.join(map(str, FONT_DIRS))}")
 
 
+def face(family: str, style: str, weight: int | tuple[int, int], file: str,
+         unicode_range: str | None = None) -> str:
+    """An @font-face ``<style>`` block: ``file`` (found by font_url()) as the face of
+    ``family`` with font-style ``style``, font-weight ``weight`` (a (min, max) tuple for a
+    weight range) and, when given, unicode-range ``unicode_range`` ("U+0000-00FF")."""
+    weights = " ".join(map(str, weight)) if isinstance(weight, tuple) else str(weight)
+    descriptors = [
+        f'font-family: "{family}"', f"font-style: {style}", f"font-weight: {weights}",
+        f'src: url("{font_url(file)}")',
+    ]
+    if unicode_range is not None:
+        descriptors.append(f"unicode-range: {unicode_range}")
+    return "<style>@font-face { " + "; ".join(descriptors) + " }</style>"
+
+
 def typo_dejavu(tmp_path: Path) -> str:
     """The file:// URL of a copy of DejaVu Sans, written to ``tmp_path``, with
     USE_TYPO_METRICS (OS/2 fsSelection bit 7) set, for @font-face rules.

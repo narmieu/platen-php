@@ -10,3 +10,5 @@
 - line-height: normal now includes the font's line gap, and glyphs from fallback fonts no longer make lines taller (CSS 2.1, browsers).
 - sup and sub inherit the paragraph's line-height and enlarge the line when they stick out (HTML user-agent stylesheet, CSS 2.1).
 - Hyphenation picks the dictionary by language and script (Serbian Latin uses sr_Latn; "en" uses en_US); the hyphen is U+2010 only when the font has it, otherwise "-".
+- @font-face weight matching follows CSS Fonts Level 4 instead of fontconfig's nearest weight.
+- @font-face accepts font-weight ranges (variable fonts), and unicode-range subsets of one weight each keep their own font in the PDF.
