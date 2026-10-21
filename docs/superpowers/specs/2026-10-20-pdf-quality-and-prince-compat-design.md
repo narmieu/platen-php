@@ -174,13 +174,17 @@ Prince input used by the templates:
 
 ### F3. Page colour space and neutral colours
 
-Layers: **F3a (quality)** recognise `-prince-pdf-page-colorspace` and give pages that ask for
-`cmyk` the CMYK group (the author asked for it). **F3b (Prince)** add the RGB group to every
-other page and write neutral colours as DeviceGray.
+Layers: **F3a (quality)** recognise `-prince-pdf-page-colorspace` and give the pages that
+ask for `cmyk` and use transparency the CMYK group (the author asked for it). **F3b
+(Prince)** give the other pages that use transparency the RGB group and write neutral
+colours as DeviceGray.
 
 Measured Prince output (same document, two named pages):
-- Every page gets `/Group <</S /Transparency /CS /DeviceRGB>>`.
-- Pages whose `@page` style has `-prince-pdf-page-colorspace: cmyk` get
+- A page gets a `/Group` only when its content uses transparency (constant alpha below 1, a
+  soft mask, a non-Normal blend mode, also inside the groups, patterns and images it
+  draws): `/Group <</S /Transparency /CS /DeviceRGB>>`. Opaque pages get none. (The first
+  calibration showed a group on every page because every page of it had transparency.)
+- Such pages whose `@page` style has `-prince-pdf-page-colorspace: cmyk` get
   `/Group <</S /Transparency /CS /DeviceCMYK>>` instead. Named pages are honoured per page.
 - Colours with r = g = b are written as DeviceGray (`0 g`, `0.5020 g`, `1.0000 g`); others as
   `rg` unchanged. Content is **not** converted to CMYK.
@@ -188,8 +192,7 @@ Measured Prince output (same document, two named pages):
   `#bbcdea`, black text (`0 g`) as `#231f20`.
 - Free fonts (re-measured 2026-10-21, `layout`): of 8 pages only the two with transparency
   (`rgba(0,0,0,0.5)`) have a `/Group`: `/DeviceCMYK` on the `cmyk` page, `/DeviceRGB` on the
-  other; the six opaque pages have none (the "every page" above was measured on pages that
-  all had transparency). Neutrals `0 g`, `0.5020 g`, `1.0000 g`, others `rg`. platen with the
+  other; the six opaque pages have none. Neutrals `0 g`, `0.5020 g`, `1.0000 g`, others `rg`. platen with the
   Prince layer writes the same groups and operators (with more decimals: `0.501961 g`).
 
 WeasyPrint 70.0: no page group; every colour `r g b rg`.

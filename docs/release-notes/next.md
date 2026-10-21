@@ -15,7 +15,7 @@ number never get Prince-layer behaviour.
 - line-height: normal now includes the font's line gap, and glyphs from fallback fonts no longer make lines taller (CSS 2.1, browsers).
 - sup and sub inherit the paragraph's line-height and enlarge the line when they stick out (HTML user-agent stylesheet, CSS 2.1).
 - Hyphenation picks the dictionary by language and script (Serbian Latin uses sr_Latn; "en" uses en_US); the hyphen is U+2010 only when the font has it, otherwise "-".
-- @font-face weight matching follows CSS Fonts Level 4 instead of fontconfig's nearest weight; where that picks another face, glyphs from fallback fonts follow the picked weight too.
+- @font-face weight matching follows CSS Fonts Level 4 instead of fontconfig's nearest weight. The requested weight is changed only when the rule picks another face than fontconfig's nearest weight would, or when two faces are equally near for fontconfig; then glyphs from fallback fonts are also set at the changed weight.
 - @font-face accepts font-weight ranges (variable fonts), and unicode-range subsets of one weight each keep their own font in the PDF.
 - Justified text may compress word spaces down to 5/6 of their width before wrapping (tighter justification, as Prince, InDesign and TeX do).
 
@@ -26,7 +26,7 @@ default):
 
 - `javascript: true` documents (DocRaptor's clients always send it) render with WeasyPrint when their `document_content` has no `<script>`, `<template>` or `on…` event-handler attribute, so running headers and footers survive; documents with scripts and `document_url` documents still go to Chromium.
 - Pages that use transparency and do not ask for CMYK get an RGB transparency group, and colours with equal red, green and blue are written as DeviceGray, as Prince writes them.
-- @font-face weight matching follows CSS Fonts Level 3, as Prince does: for 400 and 500 the other of the two comes first, so italic 500 text of a family with faces 200 and 700 uses the 700 face.
+- @font-face weight matching follows what Prince was measured to do: 400 tries 500 first, then lighter faces, then heavier ones; 500 tries 400 first, then heavier faces, then lighter ones; other weights follow CSS Fonts Level 3. So italic 500 text of a family with faces 200 and 700 uses the 700 face (plain CSS Fonts Level 3 would pick 200).
 - vertical-align: super raises by half the ascender, and sub lowers by half the descender, of the parent's font times the parent's font size; sub and sup are 83% of the parent's size; font-size: smaller divides by 1.2 and larger multiplies by 1.2.
 - Hyphenation uses Prince's dictionaries (da, de, en-US, es, fi, fr, is, it, lt, pl, pt, ru, sl, sv, th); every other language, sr included, gets en-US. The hyphen is always "-" unless the author sets hyphenate-character.
 - List markers have no trailing space and sit a fixed 8pt from the content at every font size (mirrored for right-to-left text); marker strings the author wrote keep their spaces.

@@ -113,7 +113,8 @@ The Prince layer, measured against DocRaptor:
 - script-free `javascript: true` documents stay on WeasyPrint (see above);
 - pages that use transparency get an RGB transparency group, and grey colours are written
   as DeviceGray;
-- `@font-face` weights match by CSS Fonts Level 3;
+- `@font-face` weights match as Prince was measured to: CSS Fonts Level 3, except that 500
+  tries the heavier faces before the lighter ones once 400 is missing;
 - superscripts and subscripts are raised and lowered by the parent font's ascender and
   descender, `sub`/`sup` are 83%, `smaller`/`larger` divide/multiply by 1.2;
 - hyphenation uses Prince's dictionaries (en-US for every language Prince lacks), with
