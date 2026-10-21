@@ -182,6 +182,24 @@ final class PdfFile
         return null === $part ? null : $part.$conformance;
     }
 
+    /**
+     * @return string|null the colour space of the page's transparency group (e.g. "/DeviceRGB"), null without one
+     */
+    public function pageGroupColorSpace(int $index = 0): ?string
+    {
+        $page = $this->object(self::string($this->pages()[$index]['object'] ?? null));
+        $group = $page['/Group'] ?? null;
+        if (\is_string($group)) {
+            $group = $this->object($group);
+        }
+        $colorSpace = \is_array($group) ? ($group['/CS'] ?? null) : null;
+        if (\is_array($colorSpace)) {
+            $colorSpace = $colorSpace[0] ?? null;
+        }
+
+        return \is_string($colorSpace) ? $colorSpace : null;
+    }
+
     public function hasStructureTree(): bool
     {
         return isset($this->root()['/StructTreeRoot']);
