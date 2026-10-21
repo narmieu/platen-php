@@ -12,3 +12,4 @@
 - Hyphenation picks the dictionary by language and script (Serbian Latin uses sr_Latn; "en" uses en_US); the hyphen is U+2010 only when the font has it, otherwise "-".
 - @font-face weight matching follows CSS Fonts Level 4 instead of fontconfig's nearest weight; where that picks another face, glyphs from fallback fonts follow the picked weight too.
 - @font-face accepts font-weight ranges (variable fonts), and unicode-range subsets of one weight each keep their own font in the PDF.
+- Justified text may compress word spaces down to 5/6 of their width before wrapping (tighter justification, as Prince, InDesign and TeX do).

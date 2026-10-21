@@ -10,11 +10,13 @@ from types import ModuleType
 from .. import apply_modules
 
 from . import (
-    font_matching, hyphenation, line_metrics, page_colorspace, prince_syntax, superscripts, svg,
+    font_matching, hyphenation, justification, line_metrics, page_colorspace, prince_syntax,
+    superscripts, svg,
 )
 
 MODULES: list[ModuleType] = [
     svg, prince_syntax, page_colorspace, line_metrics, superscripts, hyphenation, font_matching,
+    justification,
 ]
 
 _applied: set[ModuleType] = set()
