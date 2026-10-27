@@ -196,7 +196,7 @@ final readonly class FontEmbedder
      */
     private function request(string $url, RenderJob $job, Deadline $deadline, array $headers, int $limit): ResponseInterface
     {
-        $headers['User-Agent'] = ChromiumEngine::userAgent($job->userAgentToken);
+        $headers['User-Agent'] = ChromiumEngine::browserUserAgent($job->userAgentToken);
         if (null !== $job->referrer) {
             $headers['Referer'] = $job->referrer;
         }
