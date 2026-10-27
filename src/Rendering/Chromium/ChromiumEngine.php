@@ -31,7 +31,7 @@ final readonly class ChromiumEngine implements RenderEngine
     /**
      * The browser's own user agent says "HeadlessChrome", which some hosts refuse.
      */
-    public const string USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
+    public const string USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36';
 
     public function __construct(
         private PlatenConfig $config,
