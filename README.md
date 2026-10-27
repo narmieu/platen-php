@@ -212,7 +212,8 @@ All settings are environment variables; `.env` holds the defaults.
 | `PLATEN_DEFAULT_ENGINE` | `weasyprint` | `weasyprint` or `chromium` |
 | `PLATEN_GOTENBERG_URL` | `http://127.0.0.1:3000` | Gotenberg, which runs Chromium |
 | `PLATEN_WORKERS` | `2` | Processes rendering async and hosted-async documents |
-| `PLATEN_HTTP_WORKERS` | `8` | Concurrent requests without FrankenPHP (PHP's built-in server) |
+| `PLATEN_HTTP_WORKERS` | `8` | Requests served at once (FrankenPHP workers, or PHP's built-in server's processes). A synchronous document holds one for its whole render |
+| `FRANKENPHP_LOOP_MAX` | `500` | Requests a FrankenPHP worker serves before it is replaced |
 | `PLATEN_SYNC_TIMEOUT`, `PLATEN_ASYNC_TIMEOUT` | `60`, `600` | Seconds per document (DocRaptor's limits) |
 | `PLATEN_JS_TIMEOUT` | `30` | Seconds to wait for `docraptorJavaScriptFinished()` |
 | `PLATEN_FETCH_TIMEOUT` | `10` | Seconds per asset request |
@@ -275,7 +276,9 @@ wait for a free HTTP worker rather than failing.
 `bin/console platen:serve`, the container's command, runs and supervises:
 
 - the HTTP server: [FrankenPHP](https://frankenphp.dev) in the Docker image, PHP's
-  built-in server otherwise. Synchronous documents render inside the request;
+  built-in server otherwise. FrankenPHP runs in worker mode, which boots Symfony once
+  per worker rather than once per request (with `APP_DEBUG=1` it runs in classic mode,
+  so code changes apply at once). Synchronous documents render inside the request;
 - `PLATEN_WORKERS` Symfony Messenger workers, which render async documents and send
   callbacks. One of them also runs the schedule that deletes expired documents;
 - the egress proxy (`platen:egress-proxy`), a small ReactPHP server.
