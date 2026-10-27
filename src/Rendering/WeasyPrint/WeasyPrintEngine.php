@@ -6,8 +6,10 @@ namespace App\Rendering\WeasyPrint;
 
 use App\Config\PlatenConfig;
 use App\Network\ProxyTicket;
+use App\Rendering\Engine;
 use App\Rendering\EngineOutput;
 use App\Rendering\PageStyles;
+use App\Rendering\RenderEngine;
 use App\Rendering\RenderException;
 use App\Rendering\RenderJob;
 use App\Rendering\Source\HtmlDocument;
@@ -19,10 +21,25 @@ use Symfony\Component\Process\Process;
  * Renders with the WeasyPrint command line tool, one process per document, so a
  * document that hangs or exhausts memory takes nothing else down with it.
  */
-final readonly class WeasyPrintEngine
+final readonly class WeasyPrintEngine implements RenderEngine
 {
     public function __construct(private PlatenConfig $config)
     {
+    }
+
+    public function engine(): Engine
+    {
+        return Engine::WeasyPrint;
+    }
+
+    public function userAgent(?string $token): string
+    {
+        return trim('WeasyPrint (platen) '.($token ?? ''));
+    }
+
+    public function supportsPdfProfiles(): bool
+    {
+        return true;
     }
 
     public function render(RenderJob $job, Workspace $workspace): EngineOutput

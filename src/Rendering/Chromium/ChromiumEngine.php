@@ -6,8 +6,10 @@ namespace App\Rendering\Chromium;
 
 use App\Api\ApiException;
 use App\Config\PlatenConfig;
+use App\Rendering\Engine;
 use App\Rendering\EngineOutput;
 use App\Rendering\Pdf\Qpdf;
+use App\Rendering\RenderEngine;
 use App\Rendering\RenderException;
 use App\Rendering\RenderJob;
 use App\Rendering\Workspace;
@@ -25,7 +27,7 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  * title, which Chromium writes into the PDF. platen reads the report back with qpdf
  * and restores the real title.
  */
-final readonly class ChromiumEngine
+final readonly class ChromiumEngine implements RenderEngine
 {
     /**
      * The browser's own user agent says "HeadlessChrome", which some hosts refuse.
@@ -40,9 +42,27 @@ final readonly class ChromiumEngine
     ) {
     }
 
-    public static function userAgent(?string $token): string
+    /**
+     * The User-Agent Chromium sends, for the requests platen makes on its behalf.
+     */
+    public static function browserUserAgent(?string $token): string
     {
         return trim(self::USER_AGENT.' '.($token ?? ''));
+    }
+
+    public function engine(): Engine
+    {
+        return Engine::Chromium;
+    }
+
+    public function userAgent(?string $token): string
+    {
+        return self::browserUserAgent($token);
+    }
+
+    public function supportsPdfProfiles(): bool
+    {
+        return false;
     }
 
     public function render(RenderJob $job, Workspace $workspace): EngineOutput
@@ -58,15 +78,17 @@ final readonly class ChromiumEngine
             $this->check($job, $report);
         }
 
+        // Chromium always compresses; qpdf undoes it for no_compress.
+        $decompress = $job->options->noCompress;
         if (null === $info) {
-            return new EngineOutput($output);
+            return new EngineOutput($output, decompress: $decompress);
         }
         $title = $job->options->pdfTitle ?? $report->title ?? $info->title();
         if (null === $report && null !== $title && 1 === preg_match('/^[0-9a-f-]{36}\.html$/', $title)) {
             $title = null; // Chromium names untitled pages after Gotenberg's file name
         }
 
-        return new EngineOutput($output, $title === $info->title() ? null : $info->withTitle($title));
+        return new EngineOutput($output, $title === $info->title() ? null : $info->withTitle($title), $decompress);
     }
 
     private function convert(RenderJob $job, string $page, string $output): void
@@ -87,7 +109,7 @@ final readonly class ChromiumEngine
             'skipNetworkIdleEvent' => 'true',
             'skipNetworkAlmostIdleEvent' => 'true',
             'waitForExpression' => "typeof window.__platenReady !== 'function' || window.__platenReady() === true",
-            'userAgent' => self::userAgent($job->userAgentToken),
+            'userAgent' => self::browserUserAgent($job->userAgentToken),
         ];
         $headers = $this->extraHeaders($job);
         if ([] !== $headers) {
