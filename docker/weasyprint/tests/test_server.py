@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import time
+import warnings
 
 import pytest
 
@@ -92,6 +93,17 @@ def test_environment_is_applied_for_one_document_only(serve, monkeypatch):
     answer = request(path, [], html=b"<p>doc</p>", env={"PLATEN_TEST_SET": "child", "PLATEN_TEST_KEPT": None})
     assert answer == {"exit": 0, "stderr": "child None <p>doc</p>\n"}
     assert request(path, [], html=b"next") == {"exit": 0, "stderr": "None server next\n"}
+
+
+def test_pythonwarnings_ignore_silences_warnings(serve):
+    def render(argv, stdin):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.warn("noise")
+        print(len(caught), file=sys.stderr)
+
+    path = serve(render)
+    assert request(path, [], env={"PYTHONWARNINGS": "ignore"}) == {"exit": 0, "stderr": "0\n"}
+    assert request(path, []) == {"exit": 0, "stderr": "1\n"}
 
 
 def test_exit_codes_and_exceptions_are_reported(serve):

@@ -31,6 +31,7 @@ import socketserver
 import sys
 import tempfile
 import traceback
+import warnings
 
 from . import check_versions
 
@@ -47,6 +48,9 @@ def handle(request: dict, html: bytes, render) -> dict:
             os.environ.pop(name, None)
         else:
             os.environ[name] = str(value)
+    # Python reads PYTHONWARNINGS only when it starts, so a forked child applies it here.
+    if os.environ.get("PYTHONWARNINGS") == "ignore":
+        warnings.simplefilter("ignore")
 
     # What WeasyPrint, its libraries and their C code write to standard error.
     with tempfile.TemporaryFile() as captured:
