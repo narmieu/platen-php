@@ -125,7 +125,8 @@ The Prince layer, measured against DocRaptor:
 
 Requests without a pipeline number never get Prince-layer behaviour. Set
 `PLATEN_PRINCE_COMPAT=false` to turn the Prince layer off for everyone, or
-`PLATEN_WEASYPRINT_BINARY=weasyprint` to run WeasyPrint with neither patch layer (platen's
+`PLATEN_WEASYPRINT_BINARY=weasyprint` with an empty `PLATEN_WEASYPRINT_SERVER` to run
+WeasyPrint with neither patch layer (platen's
 font configuration, `docker/fontconfig/45-platen.conf`, stays in the image). platen asks
 for the Prince layer with the environment variable `PLATEN_WEASYPRINT_PRINCE=1`, which
 plain `weasyprint` ignores, so requests with a pipeline number render with it too.
@@ -212,7 +213,8 @@ All settings are environment variables; `.env` holds the defaults.
 | `PLATEN_DEFAULT_ENGINE` | `weasyprint` | `weasyprint` or `chromium` |
 | `PLATEN_CHROMIUM_URL` | `http://127.0.0.1:3000` | platen-chromium, which runs Chromium |
 | `PLATEN_WORKERS` | `2` | Processes rendering async and hosted-async documents |
-| `PLATEN_HTTP_WORKERS` | `8` | Concurrent requests without FrankenPHP (PHP's built-in server) |
+| `PLATEN_HTTP_WORKERS` | `8` | Requests served at once (FrankenPHP workers, or PHP's built-in server's processes). A synchronous document holds one for its whole render |
+| `FRANKENPHP_LOOP_MAX` | `500` | Requests a FrankenPHP worker serves before it is replaced |
 | `PLATEN_SYNC_TIMEOUT`, `PLATEN_ASYNC_TIMEOUT` | `60`, `600` | Seconds per document (DocRaptor's limits) |
 | `PLATEN_JS_TIMEOUT` | `30` | Seconds to wait for `docraptorJavaScriptFinished()` |
 | `PLATEN_FETCH_TIMEOUT` | `10` | Seconds per asset request |
@@ -225,6 +227,7 @@ All settings are environment variables; `.env` holds the defaults.
 | `PLATEN_MAX_REQUEST_MB` | `100` | Largest accepted request body |
 | `PLATEN_EGRESS_LISTEN` | `127.0.0.1:3128` (`0.0.0.0:3128` in Docker) | Where the egress proxy listens |
 | `PLATEN_EGRESS_PROXY` | `http://127.0.0.1:3128` | How WeasyPrint and callbacks reach the egress proxy |
+| `PLATEN_WEASYPRINT_SERVER` | `weasyprint-platen-server` in the Docker image, empty otherwise | The command that keeps WeasyPrint loaded between documents. Empty starts `PLATEN_WEASYPRINT_BINARY` for every document |
 | `PLATEN_WEASYPRINT_BINARY` | `weasyprint-platen` in the Docker image, `weasyprint` otherwise | The WeasyPrint command platen runs. `weasyprint` runs WeasyPrint with neither patch layer; platen's font configuration stays |
 | `PLATEN_QPDF_BINARY` | `qpdf` | The qpdf command platen runs |
 | `PLATEN_PRINCE_COMPAT` | `true` | Apply the Prince compatibility layer to requests that send a pipeline number |
@@ -268,10 +271,13 @@ A one-page A4 certificate with two web fonts, on a 4-CPU machine, measured at th
 | WeasyPrint | 760 ms per document | 4.6 documents per second (about 16,500 an hour) |
 | Chromium | 310 ms per document | 7.4 documents per second (about 26,500 an hour) |
 
-platen starts WeasyPrint for each document, and Python loading WeasyPrint takes about
-0.55 s of those 760 ms; the rendering itself takes about 0.1 s. The Chromium figures were
-measured with Gotenberg, before platen-chromium replaced it; its time is mostly Chromium's
-work per document, plus about 30 ms to embed the two fonts, whose
+The WeasyPrint figures were measured when platen started WeasyPrint for each document,
+and Python loading WeasyPrint took about 0.55 s of those 760 ms; the rendering itself
+takes about 0.1 s. platen now keeps WeasyPrint loaded (`weasyprint-platen-server`) and
+forks it for each document: on a short page without web fonts that cut the time per
+document from 1.0 s to 0.18 s, so expect the certificate to take about 0.2 s. The Chromium
+figures were measured with Gotenberg, before platen-chromium replaced it; its time is
+mostly Chromium's work per document, plus about 30 ms to embed the two fonts, whose
 server sends no CORS header. Beyond the documents rendering at once, requests
 wait for a free HTTP worker rather than failing.
 
@@ -280,10 +286,18 @@ wait for a free HTTP worker rather than failing.
 `bin/console platen:serve`, the container's command, runs and supervises:
 
 - the HTTP server: [FrankenPHP](https://frankenphp.dev) in the Docker image, PHP's
-  built-in server otherwise. Synchronous documents render inside the request;
+  built-in server otherwise. FrankenPHP runs in worker mode, which boots Symfony once
+  per worker rather than once per request (with `APP_DEBUG=1` it runs in classic mode,
+  so code changes apply at once). Synchronous documents render inside the request;
 - `PLATEN_WORKERS` Symfony Messenger workers, which render async documents and send
   callbacks. One of them also runs the schedule that deletes expired documents;
-- the egress proxy (`platen:egress-proxy`), a small ReactPHP server.
+- the egress proxy (`platen:egress-proxy`), a small ReactPHP server;
+- two `weasyprint-platen-server` processes, one with the quality layer and one with the
+  quality and Prince layers (the patches change the whole process). Each has loaded
+  WeasyPrint once and forks a process for every document, which renders it and exits, so
+  a document that hangs, crashes or runs out of memory still takes nothing else down. They
+  listen on Unix sockets in `PLATEN_DATA_DIR/run`. If one cannot be reached, platen logs a
+  warning and starts `PLATEN_WEASYPRINT_BINARY` for the document instead.
 
 A child that exits is started again. On `SIGTERM` the workers get 8 seconds to finish
 the document they are rendering. Documents are stored as files in `PLATEN_DATA_DIR`,

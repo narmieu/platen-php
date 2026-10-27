@@ -14,17 +14,22 @@ use App\Rendering\RenderException;
 use App\Rendering\RenderJob;
 use App\Rendering\Source\HtmlDocument;
 use App\Rendering\Workspace;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 /**
- * Renders with the WeasyPrint command line tool, one process per document, so a
- * document that hangs or exhausts memory takes nothing else down with it.
+ * Renders with WeasyPrint, one process per document, so a document that hangs or exhausts
+ * memory takes nothing else down with it. The process is forked from a warm server
+ * (PLATEN_WEASYPRINT_SERVER) when one runs, and started from the command line otherwise.
  */
 final readonly class WeasyPrintEngine implements RenderEngine
 {
-    public function __construct(private PlatenConfig $config)
-    {
+    public function __construct(
+        private PlatenConfig $config,
+        private WeasyPrintServer $server,
+        private LoggerInterface $logger,
+    ) {
     }
 
     public function engine(): Engine
@@ -53,6 +58,50 @@ final readonly class WeasyPrintEngine implements RenderEngine
         }
 
         $output = $workspace->file('weasyprint.pdf');
+        $result = $this->renderOnServer($job, $html, $output) ?? $this->renderInProcess($job, $workspace, $html, $output);
+        if (0 !== $result['exit'] || !is_file($output)) {
+            throw self::failure($result['stderr']);
+        }
+
+        return new EngineOutput($output);
+    }
+
+    /**
+     * @return array{exit: int, stderr: string}|null null when no server is reachable
+     */
+    private function renderOnServer(RenderJob $job, string $html, string $output): ?array
+    {
+        if ('' === $this->config->weasyprintServer) {
+            return null;
+        }
+        $socket = $this->config->weasyprintSocket($job->princeCompat);
+        try {
+            $result = $this->server->render(
+                $socket,
+                [...\array_slice($this->arguments($job), 1), '-', $output],
+                $this->environment($job),
+                $html,
+                $job->deadline,
+            );
+        } catch (WeasyPrintServerStopped) {
+            if ($job->deadline->remaining() <= 0) {
+                throw $job->deadline->exceeded();
+            }
+
+            throw new RenderException('Rendering failed: the WeasyPrint process stopped without an answer');
+        }
+        if (null === $result) {
+            $this->logger->warning('The WeasyPrint server at {socket} is not reachable; starting WeasyPrint for this document', ['socket' => $socket]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array{exit: int, stderr: string}
+     */
+    private function renderInProcess(RenderJob $job, Workspace $workspace, string $html, string $output): array
+    {
         $process = new Process(
             [...$this->arguments($job), '-', $output],
             $workspace->path,
@@ -65,11 +114,8 @@ final readonly class WeasyPrintEngine implements RenderEngine
         } catch (ProcessTimedOutException) {
             throw $job->deadline->exceeded();
         }
-        if (!$process->isSuccessful() || !is_file($output)) {
-            throw self::failure($process->getErrorOutput());
-        }
 
-        return new EngineOutput($output);
+        return ['exit' => $process->getExitCode() ?? 1, 'stderr' => $process->getErrorOutput()];
     }
 
     /**

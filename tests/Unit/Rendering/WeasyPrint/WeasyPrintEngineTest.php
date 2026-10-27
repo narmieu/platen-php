@@ -9,10 +9,12 @@ use App\Rendering\Deadline;
 use App\Rendering\PageStyles;
 use App\Rendering\RenderJob;
 use App\Rendering\WeasyPrint\WeasyPrintEngine;
+use App\Rendering\WeasyPrint\WeasyPrintServer;
 use App\Tests\Support\TestConfig;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 final class WeasyPrintEngineTest extends TestCase
 {
@@ -20,7 +22,7 @@ final class WeasyPrintEngineTest extends TestCase
     #[DataProvider('binaries')]
     public function itAsksForThePrinceLayerThroughTheEnvironmentOnly(string $binary): void
     {
-        $engine = new WeasyPrintEngine(TestConfig::create(weasyprintBinary: $binary));
+        $engine = new WeasyPrintEngine(TestConfig::create(weasyprintBinary: $binary), new WeasyPrintServer(), new NullLogger());
 
         $arguments = $engine->arguments(self::job(true));
 
