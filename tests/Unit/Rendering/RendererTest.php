@@ -7,14 +7,12 @@ namespace App\Tests\Unit\Rendering;
 use App\Api\ApiException;
 use App\Document\DocumentRequest;
 use App\Rendering\Engine;
-use App\Rendering\EngineOutput;
 use App\Rendering\Pdf\Qpdf;
 use App\Rendering\RenderEngine;
 use App\Rendering\Renderer;
-use App\Rendering\RenderJob;
 use App\Rendering\Source\DocumentFetcher;
 use App\Rendering\StrictHtmlValidator;
-use App\Rendering\Workspace;
+use App\Tests\Support\FakeRenderEngine;
 use App\Tests\Support\TestConfig;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -64,36 +62,8 @@ final class RendererTest extends TestCase
         return DocumentRequest::fromRequest(['document_content' => '<p>Hi</p>', ...$fields]);
     }
 
-    private static function engine(Engine $engine, bool $profiles): RenderEngine
+    private static function engine(Engine $engine, bool $profiles): FakeRenderEngine
     {
-        return new class($engine, $profiles) implements RenderEngine {
-            public bool $rendered = false;
-
-            public function __construct(private readonly Engine $engine, private readonly bool $profiles)
-            {
-            }
-
-            public function engine(): Engine
-            {
-                return $this->engine;
-            }
-
-            public function userAgent(?string $token): string
-            {
-                return 'test';
-            }
-
-            public function supportsPdfProfiles(): bool
-            {
-                return $this->profiles;
-            }
-
-            public function render(RenderJob $job, Workspace $workspace): EngineOutput
-            {
-                $this->rendered = true;
-
-                throw new \LogicException('Not rendered in this test');
-            }
-        };
+        return new FakeRenderEngine($engine, $profiles);
     }
 }
