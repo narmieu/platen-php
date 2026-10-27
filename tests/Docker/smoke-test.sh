@@ -61,6 +61,15 @@ status=$(post /docs '{"document_type": "pdf", "test": false, "pipeline": "chromi
 [ "$status" = 400 ] || fail "Chromium reached Gotenberg's loopback: $status $(cat "$work/body")"
 echo "ok: Chromium cannot reach loopback"
 
+# Run from the repository root, like the commands above. A container on the default network
+# (where an app would be) reaches platen's API, but not its egress proxy.
+compose=(docker compose -f compose.yaml -f tests/Docker/compose.smoke.yaml)
+"${compose[@]}" exec -T assets wget -q -T 5 -O /dev/null http://platen:8080/healthz || fail "the asset host cannot reach platen"
+if "${compose[@]}" exec -T assets wget -q -T 5 -O /dev/null http://platen:3128/; then
+    fail "a container on the default network reached the egress proxy"
+fi
+echo "ok: the egress proxy is only on the render network"
+
 status=$(post /async_docs '{"document_type": "pdf", "test": false, "document_content": "<p>async</p>"}')
 [ "$status" = 200 ] || fail "POST /async_docs: $status $(cat "$work/body")"
 status_id=$(json_value status_id "$work/body")

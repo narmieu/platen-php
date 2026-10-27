@@ -26,8 +26,9 @@ curl -u change-me: -H 'Content-Type: application/json' \
 ```
 
 `compose.yaml` runs two containers: `platen` (the API, the render workers and
-WeasyPrint) and `gotenberg` (Chromium). Copy both services into your own Compose file to
-run them next to your app, which then reaches platen at `http://platen:8080`.
+WeasyPrint) and `gotenberg` (Chromium). Copy both services and the `render` network into
+your own Compose file to run them next to your app, which then reaches platen at
+`http://platen:8080`.
 
 ## Switching from DocRaptor
 
@@ -223,8 +224,8 @@ All settings are environment variables; `.env` holds the defaults.
 | `PLATEN_BLOCKED_NETWORKS` | empty | Extra CIDR ranges to refuse |
 | `PLATEN_ALLOW_FILE_URLS` | `false` | Allow `file://` assets |
 | `PLATEN_MAX_REQUEST_MB` | `100` | Largest accepted request body |
-| `PLATEN_EGRESS_LISTEN` | `127.0.0.1:3128` (`0.0.0.0:3128` in Docker) | Where the egress proxy listens |
-| `PLATEN_EGRESS_PROXY` | `http://127.0.0.1:3128` | How WeasyPrint and callbacks reach the egress proxy |
+| `PLATEN_EGRESS_LISTEN` | `127.0.0.1:3128` (`0.0.0.0:3128` in the image, `egress:3128` in `compose.yaml`) | Where the egress proxy listens. A host name listens on the address it resolves to, such as a Docker network alias |
+| `PLATEN_EGRESS_PROXY` | `http://127.0.0.1:3128` (`http://egress:3128` in `compose.yaml`) | How WeasyPrint and callbacks reach the egress proxy |
 | `PLATEN_WEASYPRINT_BINARY` | `weasyprint-platen` in the Docker image, `weasyprint` otherwise | The WeasyPrint command platen runs. `weasyprint` runs WeasyPrint with neither patch layer; platen's font configuration stays |
 | `PLATEN_QPDF_BINARY` | `qpdf` | The qpdf command platen runs |
 | `PLATEN_PRINCE_COMPAT` | `true` | Apply the Prince compatibility layer to requests that send a pipeline number |
@@ -246,8 +247,10 @@ own, similar set for Chromium.
 - Chromium connects to loopback addresses directly rather than through a proxy, so
   `compose.yaml` denies them with Gotenberg's `--chromium-deny-list`. Keep that flag if
   you run Gotenberg another way.
-- The egress proxy listens on `0.0.0.0:3128` inside the Docker network so that
-  Gotenberg can reach it. Do not publish that port.
+- In `compose.yaml`, Gotenberg is only on `render`, an internal network it shares with
+  platen, and the egress proxy listens only there (as `egress:3128`). Chromium has no
+  other way out, and containers on the default network, such as your app, cannot use
+  the proxy. Keep both if you write your own Compose file, and do not publish port 3128.
 - `file://` URLs are refused unless `PLATEN_ALLOW_FILE_URLS=true`.
 - If platen's environment sets `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, the egress
   proxy forwards through that proxy after checking the destination.

@@ -15,6 +15,13 @@ services:
       PLATEN_API_KEYS: ${PLATEN_API_KEYS:?Set PLATEN_API_KEYS to one or more comma-separated API keys}
       PLATEN_PUBLIC_URL: ${PLATEN_PUBLIC_URL:-}
       PLATEN_GOTENBERG_URL: http://gotenberg:3000
+      # The egress proxy listens only on the render network, where Gotenberg is.
+      PLATEN_EGRESS_LISTEN: egress:3128
+      PLATEN_EGRESS_PROXY: http://egress:3128
+    networks:
+      default:
+      render:
+        aliases: [egress]
     ports:
       - "${PLATEN_PORT:-8080}:8080"
     volumes:
@@ -34,14 +41,23 @@ services:
       - --api-timeout=620s
       # Chromium fetches everything through platen's egress proxy, which enforces the
       # network policy. It would reach loopback directly, so that is denied here.
-      - --chromium-proxy-server=http://platen:3128
+      - --chromium-proxy-server=http://egress:3128
       - '--chromium-deny-list=^(file:(?!//\/tmp/)|(https?|wss?)://(localhost|127\.|0\.0\.0\.0|\[::1?\])).*'
       # Restarting Chromium every 100 documents waits for every running document,
       # so one slow page would hold up all others.
       - --chromium-restart-after=0
       - --libreoffice-disable-routes
       - --webhook-disable
+    # Only on the internal render network: Chromium has no way out but the egress proxy.
+    networks:
+      - render
     restart: unless-stopped
+
+networks:
+  # platen and Gotenberg only. Internal: nothing on it reaches the internet directly, and
+  # containers on the default network (your app) cannot reach the egress proxy.
+  render:
+    internal: true
 
 volumes:
   platen-data:
