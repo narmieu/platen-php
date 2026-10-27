@@ -1,7 +1,8 @@
 """Browser-oracle tests: WeasyPrint with the quality layer against platen's Chromium engine.
 
-Chromium is Gotenberg: the tests skip unless GOTENBERG_URL says where it runs. Set
-PLATEN_ORACLE_STOCK to leave the quality layer out and see the tests fail on stock WeasyPrint.
+Chromium is platen-chromium (docker/chromium): the tests skip unless PLATEN_CHROMIUM_URL
+says where it runs. Set PLATEN_ORACLE_STOCK to leave the quality layer out and see the tests
+fail on stock WeasyPrint.
 They run in their own pytest process: the quality layer patches WeasyPrint for the whole process.
 """
 
@@ -24,9 +25,9 @@ if not os.environ.get("PLATEN_ORACLE_STOCK"):
 
 
 def pytest_collection_modifyitems(config, items):
-    if os.environ.get("GOTENBERG_URL"):
+    if os.environ.get("PLATEN_CHROMIUM_URL"):
         return
-    skip = pytest.mark.skip(reason="GOTENBERG_URL is not set")
+    skip = pytest.mark.skip(reason="PLATEN_CHROMIUM_URL is not set")
     for item in items:
         if Path(item.fspath).parent == Path(__file__).parent:
             item.add_marker(skip)

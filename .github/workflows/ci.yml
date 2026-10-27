@@ -12,7 +12,6 @@ permissions:
 env:
   PHP_VERSION: "8.4"
   PHP_EXTENSIONS: dom, mbstring, pcntl, pdo_sqlite
-  GOTENBERG_IMAGE: gotenberg/gotenberg:8.37
 
 jobs:
   checks:
@@ -73,28 +72,32 @@ jobs:
           weasyprint --version
           weasyprint-platen --version
           weasyprint-platen-server --help
+      - name: Build platen-chromium
+        run: docker build -t platen-chromium:dev docker/chromium
+      - name: platen-chromium tests
+        run: docker run --rm -v "$PWD/docker/chromium/test:/app/test:ro" platen-chromium:dev node --test
       # Host networking, so that Chromium reaches the egress proxy the tests start at
       # 127.0.0.1:3128 and the asset server through the docker0 address.
-      - name: Start Gotenberg
+      - name: Start platen-chromium
         run: |
-          docker run -d --name gotenberg --network host "$GOTENBERG_IMAGE" \
-            gotenberg --api-timeout=620s --chromium-proxy-server=http://127.0.0.1:3128 \
-            --chromium-restart-after=0
+          docker run -d --name chromium --network host \
+            -e PLATEN_CHROMIUM_LISTEN=127.0.0.1:3000 -e PLATEN_CHROMIUM_PROXY=http://127.0.0.1:3128 \
+            platen-chromium:dev
           timeout 60 bash -c 'until curl -fs http://127.0.0.1:3000/health > /dev/null; do sleep 1; done'
-      # The quality layer against Chromium (Gotenberg), in a venv of its own: the layer patches
+      # The quality layer against Chromium, in a venv of its own: the layer patches
       # WeasyPrint for the whole process.
       - name: Browser oracle tests
         run: |
           python3 -m venv /tmp/oracle-venv
           /tmp/oracle-venv/bin/pip install './docker/weasyprint[test]'
-          GOTENBERG_URL=http://127.0.0.1:3000 /tmp/oracle-venv/bin/pytest docker/weasyprint/tests/oracle
+          PLATEN_CHROMIUM_URL=http://127.0.0.1:3000 /tmp/oracle-venv/bin/pytest docker/weasyprint/tests/oracle
       - run: composer test:e2e
         env:
           PLATEN_WEASYPRINT_BINARY: weasyprint-platen
           PLATEN_WEASYPRINT_SERVER: weasyprint-platen-server
-      - name: Gotenberg log
+      - name: platen-chromium log
         if: failure()
-        run: docker logs gotenberg
+        run: docker logs chromium
 
   docker:
     name: Docker image
@@ -112,7 +115,15 @@ jobs:
           tags: platen:dev
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Start platen and Gotenberg
+      - name: Build platen-chromium
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/chromium
+          load: true
+          tags: platen-chromium:dev
+          cache-from: type=gha,scope=chromium
+          cache-to: type=gha,scope=chromium,mode=max
+      - name: Start platen and platen-chromium
         run: docker compose -f compose.yaml -f tests/Docker/compose.smoke.yaml up -d --no-build --wait
       - name: Smoke test
         run: PLATEN_API_KEY=smoke-key tests/Docker/smoke-test.sh
@@ -153,3 +164,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha
+      - id: chromium-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-chromium
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: docker/chromium
+          push: true
+          tags: ${{ steps.chromium-meta.outputs.tags }}
+          labels: ${{ steps.chromium-meta.outputs.labels }}
+          cache-from: type=gha,scope=chromium

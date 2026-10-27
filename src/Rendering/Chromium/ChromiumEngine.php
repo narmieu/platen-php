@@ -14,13 +14,12 @@ use App\Rendering\RenderException;
 use App\Rendering\RenderJob;
 use App\Rendering\Workspace;
 use Symfony\Component\HttpClient\Exception\TimeoutException;
-use Symfony\Component\Mime\Part\DataPart;
-use Symfony\Component\Mime\Part\Multipart\FormDataPart;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 /**
- * Renders with Chromium through Gotenberg (https://gotenberg.dev).
+ * Renders with Chromium through platen-chromium (docker/chromium), a small service
+ * around Playwright that keeps one browser running.
  *
  * The page carries a small script (hook.js) that waits for the document to be ready,
  * collects console output and failed resources, and reports them through the page
@@ -32,7 +31,7 @@ final readonly class ChromiumEngine implements RenderEngine
     /**
      * The browser's own user agent says "HeadlessChrome", which some hosts refuse.
      */
-    public const string USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
+    public const string USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36';
 
     public function __construct(
         private PlatenConfig $config,
@@ -70,12 +69,16 @@ final readonly class ChromiumEngine implements RenderEngine
         $token = bin2hex(random_bytes(12));
         $page = new PagePreparer($this->config->jsTimeout)->prepare($job, $token, $this->fonts->css($job));
         $output = $workspace->file('chromium.pdf');
-        $this->convert($job, $page, $output);
+        $failedRequests = $this->convert($job, $page, $output);
 
         $info = $this->qpdf->info($output);
         $report = PageReport::fromTitle($info?->title(), PagePreparer::marker($token));
         if (null !== $report) {
             $this->check($job, $report);
+        }
+        if (!$job->ignoreResourceErrors && [] !== $failedRequests) {
+            // What the hook cannot see: CSS backgrounds, fonts and the requests of scripts.
+            throw self::resourceErrors($failedRequests);
         }
 
         // Chromium always compresses; qpdf undoes it for no_compress.
@@ -83,56 +86,38 @@ final readonly class ChromiumEngine implements RenderEngine
         if (null === $info) {
             return new EngineOutput($output, decompress: $decompress);
         }
-        $title = $job->options->pdfTitle ?? $report->title ?? $info->title();
-        if (null === $report && null !== $title && 1 === preg_match('/^[0-9a-f-]{36}\.html$/', $title)) {
-            $title = null; // Chromium names untitled pages after Gotenberg's file name
-        }
+        $title = $job->options->pdfTitle ?? (null === $report ? $info->title() : $report->title);
 
         return new EngineOutput($output, $title === $info->title() ? null : $info->withTitle($title), $decompress);
     }
 
-    private function convert(RenderJob $job, string $page, string $output): void
+    /**
+     * @return list<string> the requests that failed or got an HTTP error status
+     */
+    private function convert(RenderJob $job, string $page, string $output): array
     {
-        $fields = [
-            'files' => new DataPart($page, 'index.html', 'text/html'),
-            'paperWidth' => '8.5',
-            'paperHeight' => '11',
-            'marginTop' => '0',
-            'marginBottom' => '0',
-            'marginLeft' => '0',
-            'marginRight' => '0',
-            'preferCssPageSize' => 'true',
-            'printBackground' => 'true',
-            'generateDocumentOutline' => 'true',
-            'generateTaggedPdf' => 'true',
-            'emulatedMediaType' => $job->media(),
-            'skipNetworkIdleEvent' => 'true',
-            'skipNetworkAlmostIdleEvent' => 'true',
-            'waitForExpression' => "typeof window.__platenReady !== 'function' || window.__platenReady() === true",
+        $request = [
+            'html' => $page,
+            'ready' => '__platenReady',
+            'timeout' => $job->deadline->remaining(),
+            'media' => $job->media(),
             'userAgent' => self::browserUserAgent($job->userAgentToken),
+            'headers' => null === $job->referrer ? new \stdClass() : ['Referer' => $job->referrer],
+            // Prince sends the credentials with every request. When the document has a
+            // base URL, platen keeps them to that origin.
+            'authorization' => null === $job->credentials ? null : ['value' => $job->credentials->header(), 'origin' => $job->baseOrigin()],
         ];
-        $headers = $this->extraHeaders($job);
-        if ([] !== $headers) {
-            $fields['extraHttpHeaders'] = json_encode($headers, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES);
-        }
-        if (!$job->ignoreResourceErrors) {
-            // Complements the hook, which sees failed elements but not CSS backgrounds or fonts.
-            $fields['failOnResourceHttpStatusCodes'] = '[499,599]';
-            $fields['failOnResourceLoadingFailed'] = 'true';
-        }
 
-        $form = new FormDataPart($fields);
         $timeout = max(1.0, $job->deadline->remaining());
         try {
-            $response = $this->httpClient->request('POST', rtrim($this->config->gotenbergUrl, '/').'/forms/chromium/convert/html', [
-                'headers' => $form->getPreparedHeaders()->toArray(),
-                'body' => $form->bodyToIterable(),
+            $response = $this->httpClient->request('POST', rtrim($this->config->chromiumUrl, '/').'/render', [
+                'json' => $request,
                 'timeout' => $timeout,
                 'max_duration' => $timeout,
             ]);
             $status = $response->getStatusCode();
             if (200 !== $status) {
-                throw $this->failure($status, $response->getContent(false));
+                throw $this->failure($job, $status, $response->getContent(false));
             }
             $file = fopen($output, 'w');
             if (false === $file) {
@@ -145,34 +130,17 @@ final readonly class ChromiumEngine implements RenderEngine
             } finally {
                 fclose($file);
             }
+            $failed = json_decode(base64_decode($response->getHeaders()['x-resource-errors'][0] ?? '', true) ?: '[]', true);
+
+            return \is_array($failed) ? array_values(array_filter($failed, \is_string(...))) : [];
         } catch (TimeoutException) {
             throw $job->deadline->exceeded();
         } catch (TransportExceptionInterface $exception) {
             if ($job->deadline->remaining() <= 0.0) {
                 throw $job->deadline->exceeded();
             }
-            throw new ApiException(503, 'The Chromium renderer (Gotenberg) is unavailable: '.$exception->getMessage());
+            throw new ApiException(503, 'The Chromium renderer is unavailable: '.$exception->getMessage());
         }
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function extraHeaders(RenderJob $job): array
-    {
-        $headers = [];
-        if (null !== $job->referrer) {
-            $headers['Referer'] = $job->referrer;
-        }
-        if (null !== $job->credentials) {
-            // Prince sends the credentials with every request. When the document has a
-            // base URL, platen keeps them to that origin.
-            $origin = $job->baseOrigin();
-            $scope = null === $origin ? '' : ';scope=^'.preg_quote(preg_replace('/:(80|443)$/', '', $origin) ?? $origin, null).'(:\d+)?/';
-            $headers['Authorization'] = $job->credentials->header().$scope;
-        }
-
-        return $headers;
     }
 
     private function check(RenderJob $job, PageReport $report): void
@@ -187,19 +155,27 @@ final readonly class ChromiumEngine implements RenderEngine
             throw new RenderException('The document\'s JavaScript wrote to the console, which stops rendering (set ignore_console_messages to true to allow it): '.implode(' | ', \array_slice($report->console, 0, 5)));
         }
         if (!$job->ignoreResourceErrors && [] !== $report->failed) {
-            throw new RenderException('Failed to load resources (set ignore_resource_errors to true to render anyway): '.implode('; ', array_unique($report->failed)));
+            throw self::resourceErrors($report->failed);
         }
     }
 
-    private function failure(int $status, string $body): ApiException
+    /**
+     * @param list<string> $failed
+     */
+    private static function resourceErrors(array $failed): RenderException
     {
-        $message = trim(preg_replace('/\s*\n\s*/', '; ', trim($body)) ?? $body);
+        return new RenderException('Failed to load resources (set ignore_resource_errors to true to render anyway): '.implode('; ', array_unique($failed)));
+    }
+
+    private function failure(RenderJob $job, int $status, string $body): ApiException
+    {
+        $error = json_decode($body, true);
+        $message = \is_array($error) && \is_string($error['error'] ?? null) ? $error['error'] : trim($body);
 
         return match (true) {
-            409 === $status => new RenderException("Failed to load resources (set ignore_resource_errors to true to render anyway): {$message}"),
-            503 === $status => new RenderException('Rendering timed out'),
+            504 === $status => $job->deadline->exceeded(),
             $status >= 400 && $status < 500 => new RenderException("Chromium could not render the document: {$message}"),
-            default => new ApiException(502, "The Chromium renderer (Gotenberg) failed: HTTP {$status} {$message}"),
+            default => new ApiException(502, "The Chromium renderer failed: HTTP {$status} {$message}"),
         };
     }
 }

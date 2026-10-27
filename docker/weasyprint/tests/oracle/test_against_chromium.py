@@ -2,36 +2,21 @@
 normal, fallback glyphs, SVG fills with var() and SVG fonts."""
 
 import io
+import json
 import os
 import urllib.request
-import uuid
 
 import pytest
 from pypdf import PdfReader
 from pytest import approx
 from support import content, has_rgb_fill, pdf, pdf_fonts
 
-PAPER = {"paperWidth": "8.27", "paperHeight": "11.69"}
-MARGINS = {f"margin{side}": "0" for side in ("Top", "Bottom", "Left", "Right")}
-
-
 def chromium_pdf(html: str) -> bytes:
-    """The PDF that Gotenberg's Chromium makes of ``html`` (A4, no margins)."""
-    boundary = uuid.uuid4().hex
-    parts = [
-        (f'Content-Disposition: form-data; name="{name}"\r\n\r\n{value}').encode()
-        for name, value in {**PAPER, **MARGINS}.items()
-    ]
-    parts.append(
-        b'Content-Disposition: form-data; name="files"; filename="index.html"\r\n'
-        b"Content-Type: text/html\r\n\r\n" + html.encode()
-    )
-    body = b"".join(b"--" + boundary.encode() + b"\r\n" + part + b"\r\n" for part in parts)
-    body += b"--" + boundary.encode() + b"--\r\n"
+    """The PDF that platen-chromium makes of ``html`` (A4, no margins)."""
     request = urllib.request.Request(
-        os.environ["GOTENBERG_URL"].rstrip("/") + "/forms/chromium/convert/html",
-        data=body,
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        os.environ["PLATEN_CHROMIUM_URL"].rstrip("/") + "/render",
+        data=json.dumps({"html": html, "paper": {"width": "8.27in", "height": "11.69in"}}).encode(),
+        headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(request, timeout=120) as response:
         return response.read()

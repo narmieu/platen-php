@@ -1,6 +1,6 @@
-// Runs before the document's own scripts. Gotenberg calls window.__platenReady() until it
-// returns true, then prints. The outcome travels back in document.title, which becomes
-// the PDF's /Title, where platen reads it and restores the real title.
+// Runs before the document's own scripts. platen-chromium calls window.__platenReady()
+// until it returns true, then prints. The outcome travels back in document.title, which
+// becomes the PDF's /Title, where platen reads it and restores the real title.
 (() => {
   'use strict';
 

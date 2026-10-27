@@ -39,7 +39,7 @@ final class AssetsTest extends EndToEndTestCase
 
     /**
      * The font's server sends no Access-Control-Allow-Origin header, which Chromium needs
-     * for a page loaded from a file, as Gotenberg loads it.
+     * for a page from another origin, as platen-chromium serves it.
      */
     #[DataProvider('engines')]
     public function testWebFontsWithoutCorsHeaders(string $engine): void

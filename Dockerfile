@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# platen with WeasyPrint. The Chromium engine runs in a Gotenberg container next to it;
-# see compose.yaml.
+# platen with WeasyPrint. The Chromium engine runs in a platen-chromium container
+# (docker/chromium) next to it; see compose.yaml.
 
 ARG FRANKENPHP_IMAGE=dunglas/frankenphp:1.12-php8.4-trixie
 
@@ -81,7 +81,7 @@ LABEL org.opencontainers.image.title="platen" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${VERSION}"
 
-# Gotenberg's Chromium reaches the egress proxy from its own container, hence 0.0.0.0.
+# Chromium reaches the egress proxy from its own container, hence 0.0.0.0.
 ENV APP_ENV=prod \
     APP_DEBUG=0 \
     PLATEN_DATA_DIR=/var/lib/platen \

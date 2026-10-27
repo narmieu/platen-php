@@ -14,7 +14,7 @@ use Symfony\Contracts\HttpClient\ResponseInterface;
  * Tests against a running platen server, through its HTTP API only.
  *
  * The server and the asset server are shared by all tests and stopped when PHPUnit exits.
- * Set PLATEN_TEST_SKIP_CHROMIUM=1 to skip the Chromium cases when Gotenberg is not running.
+ * Set PLATEN_TEST_SKIP_CHROMIUM=1 to skip the Chromium cases when platen-chromium is not running.
  */
 abstract class EndToEndTestCase extends TestCase
 {
