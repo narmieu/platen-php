@@ -6,6 +6,7 @@ namespace App\Command;
 
 use App\Config\PlatenConfig;
 use App\Network\EgressProxy;
+use App\Network\ListenAddress;
 use App\Network\NetworkPolicy;
 use App\Network\UpstreamProxy;
 use Psr\Log\LoggerInterface;
@@ -33,13 +34,13 @@ final class EgressProxyCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('listen', null, InputOption::VALUE_REQUIRED, 'The address to listen on, e.g. 127.0.0.1:3128 (default: PLATEN_EGRESS_LISTEN)');
+        $this->addOption('listen', null, InputOption::VALUE_REQUIRED, 'The address to listen on, e.g. 127.0.0.1:3128 or egress:3128 (default: PLATEN_EGRESS_LISTEN)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $listen = $input->getOption('listen');
-        $address = \is_string($listen) ? $listen : $this->listen;
+        $address = ListenAddress::resolve(\is_string($listen) ? $listen : $this->listen);
         $loop = Loop::get();
 
         $dns = DnsConfig::loadSystemConfigBlocking();

@@ -15,6 +15,13 @@ services:
       PLATEN_API_KEYS: ${PLATEN_API_KEYS:?Set PLATEN_API_KEYS to one or more comma-separated API keys}
       PLATEN_PUBLIC_URL: ${PLATEN_PUBLIC_URL:-}
       PLATEN_CHROMIUM_URL: http://chromium:3000
+      # The egress proxy listens only on the render network, where Chromium is.
+      PLATEN_EGRESS_LISTEN: egress:3128
+      PLATEN_EGRESS_PROXY: http://egress:3128
+    networks:
+      default:
+      render:
+        aliases: [egress]
     ports:
       - "${PLATEN_PORT:-8080}:8080"
     volumes:
@@ -32,10 +39,19 @@ services:
     environment:
       # Chromium fetches everything through platen's egress proxy, which enforces the
       # network policy; loopback included.
-      PLATEN_CHROMIUM_PROXY: http://platen:3128
+      PLATEN_CHROMIUM_PROXY: http://egress:3128
       # Documents rendered at once; the rest wait their turn.
       PLATEN_CHROMIUM_CONCURRENCY: 6
+    # Only on the internal render network: Chromium has no way out but the egress proxy.
+    networks:
+      - render
     restart: unless-stopped
+
+networks:
+  # platen and Chromium only. Internal: nothing on it reaches the internet directly, and
+  # containers on the default network (your app) cannot reach the egress proxy.
+  render:
+    internal: true
 
 volumes:
   platen-data:
