@@ -35,7 +35,7 @@ final class PrinceCompatTest extends EndToEndTestCase
         // The escape hatch PLATEN_WEASYPRINT_BINARY=weasyprint: stock WeasyPrint has neither
         // layer and must not be given arguments it does not know.
         self::stopPlaten();
-        $server = PlatenServer::start(['WEASYPRINT_BINARY' => 'weasyprint']);
+        $server = PlatenServer::start(['WEASYPRINT_BINARY' => 'weasyprint', 'WEASYPRINT_SERVER' => '']);
         try {
             $response = self::render(['pipeline' => '10', 'javascript' => true, 'document_content' => '<p>stock</p>'], $server->client());
 

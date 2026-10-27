@@ -47,6 +47,7 @@ final class PlatenServer
             'PLATEN_EGRESS_PROXY' => "http://127.0.0.1:{$egressPort}",
             'PLATEN_WORKERS' => '2',
             'PLATEN_WEASYPRINT_BINARY' => 'weasyprint-platen',
+            'PLATEN_WEASYPRINT_SERVER' => 'weasyprint-platen-server',
         ];
         foreach ($settings as $name => $value) {
             $environment["PLATEN_{$name}"] = $value;

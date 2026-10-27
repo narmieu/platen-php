@@ -39,11 +39,14 @@ COPY docker/fontconfig/45-platen.conf /etc/fonts/conf.d/45-platen.conf
 
 # weasyprint-platen: WeasyPrint with platen's quality fixes, plus the Prince compatibility
 # fixes when the environment sets PLATEN_WEASYPRINT_PRINCE=1 (or given --platen-prince).
+# weasyprint-platen-server: the same, kept warm; platen:serve starts one for each layer set.
 COPY docker/weasyprint /opt/platen-weasyprint
 RUN set -eux; \
     /opt/weasyprint/bin/pip install --no-cache-dir /opt/platen-weasyprint; \
     ln -s /opt/weasyprint/bin/weasyprint-platen /usr/local/bin/weasyprint-platen; \
-    weasyprint-platen --version
+    ln -s /opt/weasyprint/bin/weasyprint-platen-server /usr/local/bin/weasyprint-platen-server; \
+    weasyprint-platen --version; \
+    weasyprint-platen-server --help
 
 WORKDIR /app
 
@@ -83,6 +86,7 @@ ENV APP_ENV=prod \
     APP_DEBUG=0 \
     PLATEN_DATA_DIR=/var/lib/platen \
     PLATEN_WEASYPRINT_BINARY=weasyprint-platen \
+    PLATEN_WEASYPRINT_SERVER=weasyprint-platen-server \
     PLATEN_EGRESS_LISTEN=0.0.0.0:3128 \
     PLATEN_MAX_REQUEST_MB=100 \
     PLATEN_PHP_MEMORY_LIMIT=512M

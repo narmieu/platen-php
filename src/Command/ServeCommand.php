@@ -70,6 +70,7 @@ final class ServeCommand extends Command implements SignalableCommandInterface
         $this->prepare();
 
         $proxy = $this->console('egress-proxy', ['platen:egress-proxy']);
+        $renderers = $this->weasyprintServers();
         $servers = [$this->httpServer()];
         for ($i = 1; $i <= max(1, $this->workers); ++$i) {
             // One worker also runs the schedule (the clean-up of expired documents).
@@ -79,7 +80,7 @@ final class ServeCommand extends Command implements SignalableCommandInterface
                 '--keepalive=5', '--time-limit=3600', '--memory-limit=256M', '--sleep=0.5',
             ]);
         }
-        $children = [$proxy, ...$servers];
+        $children = [$proxy, ...$renderers, ...$servers];
         foreach ($children as $child) {
             $child->start();
         }
@@ -98,9 +99,10 @@ final class ServeCommand extends Command implements SignalableCommandInterface
             usleep(200_000);
         }
 
-        // Stop taking work first; the workers may still need the proxy to finish theirs.
+        // Stop taking work first; the workers may still need the proxy and the WeasyPrint
+        // servers to finish theirs.
         $this->stop($servers, self::GRACE);
-        $this->stop([$proxy], 2.0);
+        $this->stop([$proxy, ...$renderers], 2.0);
 
         return Command::SUCCESS;
     }
@@ -110,7 +112,8 @@ final class ServeCommand extends Command implements SignalableCommandInterface
      */
     private function prepare(): void
     {
-        foreach ([$this->config->dataDir, $this->config->dataDir.'/files', $this->config->dataDir.'/tmp'] as $directory) {
+        foreach (['', '/files', '/tmp', '/run'] as $suffix) {
+            $directory = $this->config->dataDir.$suffix;
             if (!is_dir($directory) && !@mkdir($directory, 0o700, true) && !is_dir($directory)) {
                 throw new \RuntimeException("Cannot create the directory {$directory}");
             }
@@ -124,13 +127,44 @@ final class ServeCommand extends Command implements SignalableCommandInterface
         }
     }
 
+    /**
+     * The warm WeasyPrint servers, one for each set of patch layers.
+     *
+     * @return list<ChildProcess>
+     */
+    private function weasyprintServers(): array
+    {
+        $server = $this->config->weasyprintServer;
+        if ('' === $server) {
+            return [];
+        }
+
+        return [
+            new ChildProcess('weasyprint', [$server, '--socket', $this->config->weasyprintSocket(false)], $this->childEnvironment()),
+            new ChildProcess('weasyprint-prince', [$server, '--socket', $this->config->weasyprintSocket(true), '--prince'], $this->childEnvironment()),
+        ];
+    }
+
     private function httpServer(): ChildProcess
     {
         $address = "{$this->host}:{$this->port}";
         $public = $this->projectDir.'/public';
+        $httpWorkers = max(1, $this->httpWorkers);
         $frankenphp = new ExecutableFinder()->find('frankenphp');
         if (null !== $frankenphp) {
-            return new ChildProcess('http', [$frankenphp, 'php-server', '--listen', $address, '--root', $public], $this->childEnvironment());
+            $command = [$frankenphp, 'php-server', '--listen', $address, '--root', $public];
+            if ($this->debug) {
+                // Classic mode boots the kernel on every request, so code changes apply at once.
+                return new ChildProcess('http', $command, $this->childEnvironment());
+            }
+
+            // Worker mode: each of PLATEN_HTTP_WORKERS threads boots the kernel once and serves
+            // one request at a time; further requests wait for a free worker. A worker is
+            // replaced after FRANKENPHP_LOOP_MAX requests, so that leaks cannot build up.
+            return new ChildProcess('http', [...$command, '--worker', "{$public}/index.php,{$httpWorkers}"], [
+                ...$this->childEnvironment(),
+                'FRANKENPHP_LOOP_MAX' => getenv('FRANKENPHP_LOOP_MAX') ?: '500',
+            ]);
         }
 
         // PHP's built-in server, with a worker process per concurrent request. It only
@@ -149,7 +183,7 @@ final class ServeCommand extends Command implements SignalableCommandInterface
             '-S', $address,
             '-t', $public,
             $public.'/index.php',
-        ], [...$this->childEnvironment(), 'PHP_CLI_SERVER_WORKERS' => (string) max(1, $this->httpWorkers)]);
+        ], [...$this->childEnvironment(), 'PHP_CLI_SERVER_WORKERS' => (string) $httpWorkers]);
     }
 
     /**
