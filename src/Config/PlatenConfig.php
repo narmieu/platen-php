@@ -40,9 +40,9 @@ final readonly class PlatenConfig
         /** Where stored PDFs live. */
         #[Autowire(env: 'resolve:PLATEN_DATA_DIR')]
         public string $dataDir,
-        /** Gotenberg, which runs Chromium for us. */
-        #[Autowire(env: 'PLATEN_GOTENBERG_URL')]
-        public string $gotenbergUrl,
+        /** platen-chromium (docker/chromium), which runs Chromium for us. */
+        #[Autowire(env: 'PLATEN_CHROMIUM_URL')]
+        public string $chromiumUrl,
         /** The egress proxy every renderer fetch goes through (see platen:egress-proxy). */
         #[Autowire(env: 'PLATEN_EGRESS_PROXY')]
         public string $egressProxy,

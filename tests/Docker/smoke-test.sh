@@ -58,7 +58,7 @@ echo "ok: a script-free JavaScript document with a pipeline number renders with 
 
 status=$(post /docs '{"document_type": "pdf", "test": false, "pipeline": "chromium", "ignore_resource_errors": false,
     "document_content": "<img src=\"http://127.0.0.1:3000/health\">"}')
-[ "$status" = 400 ] || fail "Chromium reached Gotenberg's loopback: $status $(cat "$work/body")"
+[ "$status" = 400 ] || fail "Chromium reached its own loopback: $status $(cat "$work/body")"
 echo "ok: Chromium cannot reach loopback"
 
 # Run from the repository root, like the commands above. A container on the default network

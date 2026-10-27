@@ -19,9 +19,9 @@ use Symfony\Contracts\HttpClient\ResponseInterface;
 /**
  * Embeds the web fonts that Chromium would refuse to load.
  *
- * Gotenberg loads every page from a file, so the page's origin is "null", and Chromium
- * then loads a font only from a server that allows any origin with an
- * Access-Control-Allow-Origin header. Prince and WeasyPrint load fonts from anywhere, and
+ * Chromium loads every page from a made-up origin (http://platen.invalid), so it loads a
+ * font only from a server that allows other origins with an Access-Control-Allow-Origin
+ * header. Prince and WeasyPrint load fonts from anywhere, and
  * fonts on a document's own site rarely send that header, because the site's own pages
  * never needed it. platen reads the @font-face rules of the document's <style> elements
  * and stylesheets, requests each font the way Chromium would, and adds the rules again,
@@ -196,7 +196,7 @@ final readonly class FontEmbedder
      */
     private function request(string $url, RenderJob $job, Deadline $deadline, array $headers, int $limit): ResponseInterface
     {
-        $headers['User-Agent'] = ChromiumEngine::userAgent($job->userAgentToken);
+        $headers['User-Agent'] = ChromiumEngine::browserUserAgent($job->userAgentToken);
         if (null !== $job->referrer) {
             $headers['Referer'] = $job->referrer;
         }

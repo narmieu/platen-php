@@ -7,25 +7,35 @@ namespace App\Rendering;
 use App\Api\ApiException;
 use App\Config\PlatenConfig;
 use App\Document\DocumentRequest;
-use App\Rendering\Chromium\ChromiumEngine;
 use App\Rendering\Pdf\Encryption;
 use App\Rendering\Pdf\Qpdf;
 use App\Rendering\Source\DocumentFetcher;
-use App\Rendering\WeasyPrint\WeasyPrintEngine;
+use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 
 /**
  * Picks an engine for a document request, runs it and post-processes the PDF.
  */
 final readonly class Renderer
 {
+    /** @var array<string, RenderEngine> by Engine value */
+    private array $engines;
+
+    /**
+     * @param iterable<RenderEngine> $engines
+     */
     public function __construct(
         private PlatenConfig $config,
         private DocumentFetcher $fetcher,
-        private WeasyPrintEngine $weasyPrint,
-        private ChromiumEngine $chromium,
         private Qpdf $qpdf,
         private StrictHtmlValidator $validator,
+        #[AutowireIterator(RenderEngine::class)]
+        iterable $engines,
     ) {
+        $byName = [];
+        foreach ($engines as $engine) {
+            $byName[$engine->engine()->value] = $engine;
+        }
+        $this->engines = $byName;
     }
 
     /**
@@ -40,9 +50,9 @@ final readonly class Renderer
         }
 
         $choice = EngineChoice::for($request, $this->config);
-        $engine = $choice->engine;
+        $engine = $this->engines[$choice->engine->value] ?? throw new \LogicException("No RenderEngine for {$choice->engine->value}");
         $profile = PdfProfile::fromPrince($options->profile);
-        if (null !== $profile && Engine::Chromium === $engine) {
+        if (null !== $profile && !$engine->supportsPdfProfiles()) {
             $message = 'PDF profiles (PDF/A, PDF/UA, PDF/X) need the weasyprint pipeline';
             throw ApiException::badRequest($request->runsJavaScript() ? "{$message}, which does not run JavaScript" : $message);
         }
@@ -88,23 +98,19 @@ final readonly class Renderer
         );
 
         $workspace = Workspace::create($this->config->dataDir.'/tmp');
-        $output = match ($engine) {
-            Engine::WeasyPrint => $this->weasyPrint->render($job, $workspace),
-            Engine::Chromium => $this->chromium->render($job, $workspace),
-        };
+        $output = $engine->render($job, $workspace);
 
         $pages = $this->qpdf->pageCount($output->pdf);
         $pdf = $output->pdf;
-        $decompress = Engine::Chromium === $engine && $options->noCompress;
-        if (null !== $output->info || null !== $encryption || $decompress) {
+        if (null !== $output->info || null !== $encryption || $output->decompress) {
             $pdf = $workspace->file('final.pdf');
-            $this->qpdf->rewrite($output->pdf, $pdf, $workspace, $output->info, $encryption, $decompress);
+            $this->qpdf->rewrite($output->pdf, $pdf, $workspace, $output->info, $encryption, $output->decompress);
         }
 
         $result = \dirname($workspace->path).'/'.basename($workspace->path).'.pdf';
         rename($pdf, $result);
 
-        return new RenderResult($result, $pages, $engine);
+        return new RenderResult($result, $pages, $engine->engine());
     }
 
     /**
@@ -112,13 +118,9 @@ final readonly class Renderer
      *
      * @return array<string, string>
      */
-    private function documentHeaders(Engine $engine, DocumentRequest $request, ?Credentials $credentials): array
+    private function documentHeaders(RenderEngine $engine, DocumentRequest $request, ?Credentials $credentials): array
     {
-        $headers = [
-            'User-Agent' => Engine::Chromium === $engine
-                ? ChromiumEngine::userAgent($request->userAgentToken)
-                : trim('WeasyPrint (platen) '.($request->userAgentToken ?? '')),
-        ];
+        $headers = ['User-Agent' => $engine->userAgent($request->userAgentToken)];
         if (null !== $request->referrer) {
             $headers['Referer'] = $request->referrer;
         }

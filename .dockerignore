@@ -15,5 +15,6 @@ var
 vendor
 *.md
 docker/weasyprint/tests
+docker/chromium
 **/__pycache__
 **/.pytest_cache

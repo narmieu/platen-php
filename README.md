@@ -9,8 +9,8 @@ platen is a Symfony application. It renders with two open-source engines:
   running headers, page counters, footnotes, `target-counter()`, leaders, bookmarks,
   PDF/A and PDF/UA. Of the open-source engines it is the closest to Prince, which
   DocRaptor runs.
-- **Chromium**, run by [Gotenberg](https://gotenberg.dev) in a container next to platen,
-  runs your JavaScript and produces browser-exact output when a document needs it.
+- **Chromium**, run by platen-chromium, a small [Playwright](https://playwright.dev)
+  service in a container next to platen, runs your JavaScript and produces browser-exact output when a document needs it.
 
 Nothing is sent to a third party, there is no per-document fee, and documents never
 leave your network.
@@ -26,9 +26,9 @@ curl -u change-me: -H 'Content-Type: application/json' \
 ```
 
 `compose.yaml` runs two containers: `platen` (the API, the render workers and
-WeasyPrint) and `gotenberg` (Chromium). Copy both services and the `render` network into
-your own Compose file to run them next to your app, which then reaches platen at
-`http://platen:8080`.
+WeasyPrint) and `chromium` (platen-chromium, built from `docker/chromium`). Copy both
+services and the `render` network into your own Compose file to run them next to your app,
+which then reaches platen at `http://platen:8080`.
 
 ## Switching from DocRaptor
 
@@ -191,8 +191,8 @@ XML with DocRaptor's status codes (400, 401, 403, 422). PDFs carry the
   `content: flow()`, the `@top` / `@bottom` page regions and
   `-prince-pdf-page-colorspace`. Standard paged-media CSS is.
 - Without an `@page` size, pages are US Letter with 54pt margins, Prince's defaults.
-- Web fonts load from any server, as with Prince. Because Gotenberg loads each page from
-  a file, Chromium would only load fonts whose server sends
+- Web fonts load from any server, as with Prince. Because platen-chromium serves each page
+  from an origin of its own, Chromium would only load fonts whose server sends
   `Access-Control-Allow-Origin: *`, so platen downloads the others and embeds them in the
   page. It finds fonts in `<style>` elements and stylesheets (up to 20 stylesheets and
   60 fonts a document), but not fonts that scripts add.
@@ -211,7 +211,7 @@ All settings are environment variables; `.env` holds the defaults.
 | `PLATEN_DATA_DIR` | `var/data` (`/var/lib/platen` in Docker) | SQLite database and stored PDFs |
 | `DATABASE_URL` | SQLite in `PLATEN_DATA_DIR` | The database for documents and the job queue |
 | `PLATEN_DEFAULT_ENGINE` | `weasyprint` | `weasyprint` or `chromium` |
-| `PLATEN_GOTENBERG_URL` | `http://127.0.0.1:3000` | Gotenberg, which runs Chromium |
+| `PLATEN_CHROMIUM_URL` | `http://127.0.0.1:3000` | platen-chromium, which runs Chromium |
 | `PLATEN_WORKERS` | `2` | Processes rendering async and hosted-async documents |
 | `PLATEN_HTTP_WORKERS` | `8` | Concurrent requests without FrankenPHP (PHP's built-in server) |
 | `PLATEN_SYNC_TIMEOUT`, `PLATEN_ASYNC_TIMEOUT` | `60`, `600` | Seconds per document (DocRaptor's limits) |
@@ -234,8 +234,12 @@ All settings are environment variables; `.env` holds the defaults.
 
 Fonts: the image ships DejaVu, Liberation (metric-compatible with Arial, Times New Roman
 and Courier New), Carlito, Caladea and Noto. Add your own by mounting them under
-`/usr/local/share/fonts`, or load them with `@font-face`. The Gotenberg image has its
-own, similar set for Chromium.
+`/usr/local/share/fonts`, or load them with `@font-face`. The platen-chromium image
+(Playwright's) has its own, similar set for Chromium.
+
+platen-chromium is configured with its own variables: `PLATEN_CHROMIUM_PROXY` (platen's
+egress proxy, required for the network policy to apply), `PLATEN_CHROMIUM_LISTEN`
+(`0.0.0.0:3000`) and `PLATEN_CHROMIUM_CONCURRENCY` (`6`, documents rendered at once).
 
 ## Security
 
@@ -244,14 +248,14 @@ own, similar set for Chromium.
   address it checked. Link-local addresses (cloud metadata endpoints such as
   `169.254.169.254`) are always refused. Set `PLATEN_BLOCK_PRIVATE_NETWORKS=true` if
   documents come from untrusted sources and should not reach your internal network.
-- Chromium connects to loopback addresses directly rather than through a proxy, so
-  `compose.yaml` denies them with Gotenberg's `--chromium-deny-list`. Keep that flag if
-  you run Gotenberg another way.
-- In `compose.yaml`, Gotenberg is only on `render`, an internal network it shares with
-  platen, and the egress proxy listens only there (as `egress:3128`). Chromium has no
+- platen-chromium sends loopback addresses through the proxy too (Chromium would
+  otherwise connect to them directly), and keeps WebRTC from sending UDP around it.
+- In `compose.yaml`, platen-chromium is only on `render`, an internal network it shares
+  with platen, and the egress proxy listens only there (as `egress:3128`). Chromium has no
   other way out, and containers on the default network, such as your app, cannot use
   the proxy. Keep both if you write your own Compose file, and do not publish port 3128.
-- `file://` URLs are refused unless `PLATEN_ALLOW_FILE_URLS=true`.
+- `file://` URLs are refused unless `PLATEN_ALLOW_FILE_URLS=true`, and Chromium never
+  loads them.
 - If platen's environment sets `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, the egress
   proxy forwards through that proxy after checking the destination.
 - Download URLs work without credentials, like DocRaptor's; the id is a random
@@ -268,8 +272,9 @@ A one-page A4 certificate with two web fonts, on a 4-CPU machine, measured at th
 | Chromium | 310 ms per document | 7.4 documents per second (about 26,500 an hour) |
 
 platen starts WeasyPrint for each document, and Python loading WeasyPrint takes about
-0.55 s of those 760 ms; the rendering itself takes about 0.1 s. Chromium's time is
-mostly Gotenberg's work per document, plus about 30 ms to embed the two fonts, whose
+0.55 s of those 760 ms; the rendering itself takes about 0.1 s. The Chromium figures were
+measured with Gotenberg, before platen-chromium replaced it; its time is mostly Chromium's
+work per document, plus about 30 ms to embed the two fonts, whose
 server sends no CORS header. Beyond the documents rendering at once, requests
 wait for a free HTTP worker rather than failing.
 
@@ -294,24 +299,22 @@ and their records and the job queue in SQLite, set up by Doctrine migrations on 
   the instance that created the document, or use synchronous documents.
 - An async document whose worker was killed (a crash, or a stop that outlasted the
   grace period) is rendered again 30 seconds after platen is back.
-- Gotenberg renders six Chromium documents at a time and queues the rest.
-  `compose.yaml` turns off its restart of Chromium every 100 documents: that restart
-  waits for every running document, so one slow page would hold up all others.
-  Restart the `gotenberg` container from time to time instead if its memory grows.
+- platen-chromium renders six documents at a time (`PLATEN_CHROMIUM_CONCURRENCY`) and
+  queues the rest. Each document gets a fresh browser context, closed when its PDF is
+  written or its time is up, so a page stuck in a script loop is stopped at platen's
+  timeout. If Chromium crashes, the next document starts it again.
 
 ## Known limitations
 
-- A script stuck in an endless loop keeps a Chromium tab busy until Gotenberg's
-  `--api-timeout`, even after platen has answered with a timeout error.
-- JavaScript documents from `document_url` run from a local copy, so their scripts see a
-  `file://` origin rather than the original one.
+- JavaScript documents from `document_url` run from a copy, so their scripts see the
+  origin `http://platen.invalid` rather than the original one.
 - With WeasyPrint, `user_agent_token`, `referrer` and `http_user` reach `https://` assets
   without the extra headers: the proxy only sees the encrypted connection.
 
 ## Development
 
 You need PHP 8.4 with the `dom`, `pcntl` and `pdo_sqlite` extensions, Composer, qpdf 11
-or later, Docker for Gotenberg, and WeasyPrint 70.0 ([its system
+or later, Docker for platen-chromium, and WeasyPrint 70.0 ([its system
 libraries](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html)) with platen's
 wrapper and font configuration, installed as CI does:
 
@@ -323,13 +326,13 @@ composer check        # code style, PHPStan at its strictest level, unit tests
 ```
 
 The end-to-end tests start platen themselves and talk to it over HTTP only. They run
-`weasyprint-platen` (and `weasyprint` for the escape hatch), and need Gotenberg on the host
-network, with its Chromium pointed at the egress proxy the tests start:
+`weasyprint-platen` (and `weasyprint` for the escape hatch), and need platen-chromium on
+the host network, pointed at the egress proxy the tests start:
 
 ```sh
-docker run -d --name gotenberg --network host gotenberg/gotenberg:8.37 \
-  gotenberg --api-timeout=620s --chromium-proxy-server=http://127.0.0.1:3128 \
-  --chromium-restart-after=0
+docker build -t platen-chromium:dev docker/chromium
+docker run -d --name chromium --network host -e PLATEN_CHROMIUM_LISTEN=127.0.0.1:3000 \
+  -e PLATEN_CHROMIUM_PROXY=http://127.0.0.1:3128 platen-chromium:dev
 composer test:e2e
 ```
 
@@ -339,21 +342,27 @@ differs.
 
 The WeasyPrint wrapper has its own tests. Each layer patches WeasyPrint for the whole
 process, so each layer's tests run in their own pytest process; the oracle tests compare
-quality-layer behaviour with Gotenberg's Chromium:
+quality-layer behaviour with platen-chromium's Chromium:
 
 ```sh
 pip install './docker/weasyprint[test]'
 pytest docker/weasyprint/tests/test_cli.py docker/weasyprint/tests/quality
 pytest docker/weasyprint/tests/prince
-GOTENBERG_URL=http://127.0.0.1:3000 pytest docker/weasyprint/tests/oracle
+PLATEN_CHROMIUM_URL=http://127.0.0.1:3000 pytest docker/weasyprint/tests/oracle
+```
+
+platen-chromium's own tests run in its image:
+
+```sh
+docker run --rm -v "$PWD/docker/chromium/test:/app/test:ro" platen-chromium:dev node --test
 ```
 
 `tests/Docker/smoke-test.sh` checks the Docker image and `compose.yaml`; CI runs all of
-these on every push and publishes the image to GitHub's registry when a `v*` tag is
-pushed.
+these on every push and publishes both images (`platen` and `platen-chromium`) to GitHub's
+registry when a `v*` tag is pushed.
 
 ## License
 
-MIT. WeasyPrint is BSD-licensed, Gotenberg is MIT, Chromium is BSD-licensed, and
+MIT. WeasyPrint is BSD-licensed, Playwright is Apache-2.0, Chromium is BSD-licensed, and
 FrankenPHP is MIT. DocRaptor and Prince are trademarks of their owners; platen is not
 affiliated with them.
