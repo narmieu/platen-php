@@ -48,6 +48,9 @@ final readonly class PlatenConfig
         public string $egressProxy,
         #[Autowire(env: 'PLATEN_WEASYPRINT_BINARY')]
         public string $weasyprintBinary,
+        /** weasyprint-platen-server, which keeps WeasyPrint warm; '' runs the command per document. */
+        #[Autowire(env: 'PLATEN_WEASYPRINT_SERVER')]
+        public string $weasyprintServer,
         /** Imitate Prince when a request names a Prince pipeline number. */
         #[Autowire(env: 'bool:default:platen_prince_compat_default:PLATEN_PRINCE_COMPAT')]
         public bool $princeCompat,
@@ -82,6 +85,14 @@ final readonly class PlatenConfig
         $this->defaultEngine = Engine::tryFrom(strtolower(trim($defaultEngine)))
             ?? throw new \InvalidArgumentException('PLATEN_DEFAULT_ENGINE must be "weasyprint" or "chromium".');
         $this->blockedNetworks = self::splitList($blockedNetworks);
+    }
+
+    /**
+     * The socket of the weasyprint-platen-server for one set of patch layers.
+     */
+    public function weasyprintSocket(bool $princeCompat): string
+    {
+        return $this->dataDir.'/run/'.($princeCompat ? 'weasyprint-prince.sock' : 'weasyprint.sock');
     }
 
     public function maxRequestBytes(): int

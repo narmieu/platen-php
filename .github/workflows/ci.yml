@@ -47,7 +47,7 @@ jobs:
           pip install './docker/weasyprint[test]'
       # Each layer patches WeasyPrint for the whole process: one pytest process per layer.
       - name: Quality layer tests
-        run: pytest docker/weasyprint/tests/test_cli.py docker/weasyprint/tests/quality
+        run: pytest docker/weasyprint/tests/test_cli.py docker/weasyprint/tests/test_server.py docker/weasyprint/tests/quality
       - name: Prince layer tests
         run: pytest docker/weasyprint/tests/prince
 
@@ -72,6 +72,7 @@ jobs:
           pipx install --include-deps ./docker/weasyprint
           weasyprint --version
           weasyprint-platen --version
+          weasyprint-platen-server --help
       # Host networking, so that Chromium reaches the egress proxy the tests start at
       # 127.0.0.1:3128 and the asset server through the docker0 address.
       - name: Start Gotenberg
@@ -90,6 +91,7 @@ jobs:
       - run: composer test:e2e
         env:
           PLATEN_WEASYPRINT_BINARY: weasyprint-platen
+          PLATEN_WEASYPRINT_SERVER: weasyprint-platen-server
       - name: Gotenberg log
         if: failure()
         run: docker logs gotenberg

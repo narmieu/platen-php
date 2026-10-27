@@ -70,6 +70,7 @@ final class ServeCommand extends Command implements SignalableCommandInterface
         $this->prepare();
 
         $proxy = $this->console('egress-proxy', ['platen:egress-proxy']);
+        $renderers = $this->weasyprintServers();
         $servers = [$this->httpServer()];
         for ($i = 1; $i <= max(1, $this->workers); ++$i) {
             // One worker also runs the schedule (the clean-up of expired documents).
@@ -79,7 +80,7 @@ final class ServeCommand extends Command implements SignalableCommandInterface
                 '--keepalive=5', '--time-limit=3600', '--memory-limit=256M', '--sleep=0.5',
             ]);
         }
-        $children = [$proxy, ...$servers];
+        $children = [$proxy, ...$renderers, ...$servers];
         foreach ($children as $child) {
             $child->start();
         }
@@ -98,9 +99,10 @@ final class ServeCommand extends Command implements SignalableCommandInterface
             usleep(200_000);
         }
 
-        // Stop taking work first; the workers may still need the proxy to finish theirs.
+        // Stop taking work first; the workers may still need the proxy and the WeasyPrint
+        // servers to finish theirs.
         $this->stop($servers, self::GRACE);
-        $this->stop([$proxy], 2.0);
+        $this->stop([$proxy, ...$renderers], 2.0);
 
         return Command::SUCCESS;
     }
@@ -110,7 +112,8 @@ final class ServeCommand extends Command implements SignalableCommandInterface
      */
     private function prepare(): void
     {
-        foreach ([$this->config->dataDir, $this->config->dataDir.'/files', $this->config->dataDir.'/tmp'] as $directory) {
+        foreach (['', '/files', '/tmp', '/run'] as $suffix) {
+            $directory = $this->config->dataDir.$suffix;
             if (!is_dir($directory) && !@mkdir($directory, 0o700, true) && !is_dir($directory)) {
                 throw new \RuntimeException("Cannot create the directory {$directory}");
             }
@@ -122,6 +125,24 @@ final class ServeCommand extends Command implements SignalableCommandInterface
         if (Command::SUCCESS !== $application->find('doctrine:migrations:migrate')->run($migrate, $output)) {
             throw new \RuntimeException("Could not migrate the database:\n".$output->fetch());
         }
+    }
+
+    /**
+     * The warm WeasyPrint servers, one for each set of patch layers.
+     *
+     * @return list<ChildProcess>
+     */
+    private function weasyprintServers(): array
+    {
+        $server = $this->config->weasyprintServer;
+        if ('' === $server) {
+            return [];
+        }
+
+        return [
+            new ChildProcess('weasyprint', [$server, '--socket', $this->config->weasyprintSocket(false)], $this->childEnvironment()),
+            new ChildProcess('weasyprint-prince', [$server, '--socket', $this->config->weasyprintSocket(true), '--prince'], $this->childEnvironment()),
+        ];
     }
 
     private function httpServer(): ChildProcess
