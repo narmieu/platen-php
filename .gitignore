@@ -21,3 +21,6 @@
 
 # Python bytecode (docker/weasyprint, tools)
 __pycache__/
+
+# The Chromium sidecar (docker/chromium)
+node_modules/

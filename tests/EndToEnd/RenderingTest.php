@@ -83,6 +83,18 @@ final class RenderingTest extends EndToEndTestCase
     }
 
     #[DataProvider('engines')]
+    public function testDocumentTitleIsKeptAndAnUntitledDocumentHasNone(string $engine): void
+    {
+        self::requireEngine($engine);
+        $titled = self::render(['pipeline' => $engine, 'document_content' => '<title>Original</title><p>x</p>']);
+        $untitled = self::render(['pipeline' => $engine, 'document_content' => '<p>x</p>']);
+
+        self::assertSame('Original', PdfFile::fromBytes($titled->getContent())->title());
+        // Not the report platen's page hook leaves in the title.
+        self::assertNull(PdfFile::fromBytes($untitled->getContent())->title());
+    }
+
+    #[DataProvider('engines')]
     public function testMediaScreen(string $engine): void
     {
         self::requireEngine($engine);

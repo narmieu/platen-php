@@ -1,0 +1,17 @@
+{
+  "name": "platen-chromium",
+  "private": true,
+  "description": "platen's Chromium engine: an HTTP service around Playwright",
+  "type": "module",
+  "main": "server.mjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

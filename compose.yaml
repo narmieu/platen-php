@@ -1,4 +1,4 @@
-# platen and the Gotenberg container that runs its Chromium engine.
+# platen and the platen-chromium container that runs its Chromium engine.
 #
 #   PLATEN_API_KEYS=change-me docker compose up -d --build
 #   curl -u change-me: -H 'Content-Type: application/json' \
@@ -14,33 +14,27 @@ services:
     environment:
       PLATEN_API_KEYS: ${PLATEN_API_KEYS:?Set PLATEN_API_KEYS to one or more comma-separated API keys}
       PLATEN_PUBLIC_URL: ${PLATEN_PUBLIC_URL:-}
-      PLATEN_GOTENBERG_URL: http://gotenberg:3000
+      PLATEN_CHROMIUM_URL: http://chromium:3000
     ports:
       - "${PLATEN_PORT:-8080}:8080"
     volumes:
       - platen-data:/var/lib/platen
     depends_on:
-      - gotenberg
+      - chromium
     # platen gives workers 8 s to finish the document they are rendering, then stops.
     # A document cut off is rendered again once platen is back.
     stop_grace_period: 30s
     restart: unless-stopped
 
-  gotenberg:
-    image: gotenberg/gotenberg:8.37
-    command:
-      - gotenberg
-      # Rendering timeouts are platen's; this only has to outlast them.
-      - --api-timeout=620s
+  chromium:
+    build: docker/chromium
+    image: platen-chromium:${PLATEN_VERSION:-dev}
+    environment:
       # Chromium fetches everything through platen's egress proxy, which enforces the
-      # network policy. It would reach loopback directly, so that is denied here.
-      - --chromium-proxy-server=http://platen:3128
-      - '--chromium-deny-list=^(file:(?!//\/tmp/)|(https?|wss?)://(localhost|127\.|0\.0\.0\.0|\[::1?\])).*'
-      # Restarting Chromium every 100 documents waits for every running document,
-      # so one slow page would hold up all others.
-      - --chromium-restart-after=0
-      - --libreoffice-disable-routes
-      - --webhook-disable
+      # network policy; loopback included.
+      PLATEN_CHROMIUM_PROXY: http://platen:3128
+      # Documents rendered at once; the rest wait their turn.
+      PLATEN_CHROMIUM_CONCURRENCY: 6
     restart: unless-stopped
 
 volumes:

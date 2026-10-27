@@ -11,8 +11,8 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 /**
  * A platen server started with `bin/console platen:serve`, as in production.
  *
- * Chromium reaches the egress proxy at the address Gotenberg was started with
- * (--chromium-proxy-server), 127.0.0.1:3128 unless PLATEN_TEST_EGRESS_PORT says otherwise,
+ * Chromium reaches the egress proxy at the address platen-chromium was started with
+ * (PLATEN_CHROMIUM_PROXY), 127.0.0.1:3128 unless PLATEN_TEST_EGRESS_PORT says otherwise,
  * so only one server runs at a time.
  */
 final class PlatenServer
