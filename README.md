@@ -235,10 +235,13 @@ All settings are environment variables; `.env` holds the defaults.
 | `PLATEN_PHP_MEMORY_LIMIT` | `512M` | PHP's memory limit in the Docker image |
 | `TRUSTED_PROXIES` | empty | Reverse proxies trusted for `X-Forwarded-*` headers |
 
-Fonts: the image ships DejaVu, Liberation (metric-compatible with Arial, Times New Roman
-and Courier New), Carlito, Caladea and Noto. Add your own by mounting them under
-`/usr/local/share/fonts`, or load them with `@font-face`. The platen-chromium image
-(Playwright's) has its own, similar set for Chromium.
+Fonts: both images ship DejaVu, Liberation (metric-compatible with Arial, Times New Roman
+and Courier New), Carlito and Caladea (metric-compatible with Calibri and Cambria) and
+Noto, with the same font configuration (`docker/fontconfig`), so both engines pick the
+same font for a family name. platen-chromium also keeps the fonts of Playwright's image,
+which cover Chinese, Japanese and emoji. Add your own by mounting one directory under
+`/usr/local/share/fonts` in both containers (`compose.yaml` shows how), or load them with
+`@font-face`.
 
 platen-chromium is configured with its own variables: `PLATEN_CHROMIUM_PROXY` (platen's
 egress proxy, required for the network policy to apply), `PLATEN_CHROMIUM_LISTEN`
@@ -344,7 +347,7 @@ The end-to-end tests start platen themselves and talk to it over HTTP only. They
 the host network, pointed at the egress proxy the tests start:
 
 ```sh
-docker build -t platen-chromium:dev docker/chromium
+docker build -f docker/chromium/Dockerfile -t platen-chromium:dev .
 docker run -d --name chromium --network host -e PLATEN_CHROMIUM_LISTEN=127.0.0.1:3000 \
   -e PLATEN_CHROMIUM_PROXY=http://127.0.0.1:3128 platen-chromium:dev
 composer test:e2e

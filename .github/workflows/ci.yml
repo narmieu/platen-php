@@ -73,7 +73,7 @@ jobs:
           weasyprint-platen --version
           weasyprint-platen-server --help
       - name: Build platen-chromium
-        run: docker build -t platen-chromium:dev docker/chromium
+        run: docker build -f docker/chromium/Dockerfile -t platen-chromium:dev .
       - name: platen-chromium tests
         run: docker run --rm -v "$PWD/docker/chromium/test:/app/test:ro" platen-chromium:dev node --test
       # Host networking, so that Chromium reaches the egress proxy the tests start at
@@ -118,7 +118,8 @@ jobs:
       - name: Build platen-chromium
         uses: docker/build-push-action@v6
         with:
-          context: docker/chromium
+          context: .
+          file: docker/chromium/Dockerfile
           load: true
           tags: platen-chromium:dev
           cache-from: type=gha,scope=chromium
@@ -173,7 +174,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
       - uses: docker/build-push-action@v6
         with:
-          context: docker/chromium
+          context: .
+          file: docker/chromium/Dockerfile
           push: true
           tags: ${{ steps.chromium-meta.outputs.tags }}
           labels: ${{ steps.chromium-meta.outputs.labels }}
