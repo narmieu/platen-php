@@ -26,6 +26,12 @@ async function assetServer() {
 
 const signal = () => new AbortController().signal;
 
+/** The fonts a PDF embeds, without their subset tags. */
+const fonts = (pdf) => [...new Set(Array.from(
+  pdf.toString('latin1').matchAll(/\/BaseFont\s*\/(?:[A-Z]{6}\+)?([^\s/<>[\]()]+)/g),
+  (match) => match[1],
+))];
+
 describe('rendering', () => {
   let renderer;
   let assets;
@@ -64,6 +70,20 @@ describe('rendering', () => {
     const { pdf, failed } = await renderer.render({ html }, signal());
     assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
     assert.deepEqual(failed, [`${assets.url}/missing.png (HTTP 404)`]);
+  });
+
+  test('font names get the fonts WeasyPrint gives them', async () => {
+    // The cases of docker/weasyprint/tests/quality/test_fonts.py, plus the
+    // metric-compatible fonts for Calibri and Cambria.
+    const cases = [
+      ['serif', 'LiberationSerif'], ['sans-serif', 'LiberationSans'], ['monospace', 'LiberationMono'],
+      ['NoSuchFont', 'LiberationSerif'], ['Arial', 'LiberationSans'], ["'Times New Roman'", 'LiberationSerif'],
+      ['Calibri', 'Carlito-Regular'], ['Cambria', 'Caladea-Regular'],
+    ];
+    for (const [family, font] of cases) {
+      const { pdf } = await renderer.render({ html: `<p style="font-family: ${family}">ab</p>` }, signal());
+      assert.deepEqual(fonts(pdf), [font], family);
+    }
   });
 
   test('requests carry the user agent and headers, and credentials only to their origin', async () => {

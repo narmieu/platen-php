@@ -26,6 +26,9 @@ services:
       - "${PLATEN_PORT:-8080}:8080"
     volumes:
       - platen-data:/var/lib/platen
+      # Your own fonts. Mount the same directory into chromium below, so that both
+      # engines have them.
+      # - ./fonts:/usr/local/share/fonts/custom:ro
     depends_on:
       - chromium
     # platen gives workers 8 s to finish the document they are rendering, then stops.
@@ -34,7 +37,10 @@ services:
     restart: unless-stopped
 
   chromium:
-    build: docker/chromium
+    build:
+      # The repository root, which holds the font configuration both images share.
+      context: .
+      dockerfile: docker/chromium/Dockerfile
     image: platen-chromium:${PLATEN_VERSION:-dev}
     environment:
       # Chromium fetches everything through platen's egress proxy, which enforces the
@@ -45,6 +51,8 @@ services:
     # Only on the internal render network: Chromium has no way out but the egress proxy.
     networks:
       - render
+    # volumes:
+    #   - ./fonts:/usr/local/share/fonts/custom:ro
     restart: unless-stopped
 
 networks:
